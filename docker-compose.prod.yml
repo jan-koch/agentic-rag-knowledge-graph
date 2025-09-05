@@ -1,0 +1,171 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: agentic-rag-app
+    environment:
+      - APP_ENV=production
+      - APP_HOST=127.0.0.1  # Only bind to localhost for security
+      - APP_PORT=8058
+      - LOG_LEVEL=INFO
+      - DATABASE_URL=postgresql://raguser:${POSTGRES_PASSWORD}@postgres:5432/agentic_rag
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
+      - LLM_PROVIDER=${LLM_PROVIDER}
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_CHOICE=${LLM_CHOICE}
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER}
+      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL}
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL}
+      - INGESTION_LLM_CHOICE=${INGESTION_LLM_CHOICE}
+      # Security Configuration
+      - N8N_API_KEY=${N8N_API_KEY}
+      - N8N_WEBHOOK_SECRET=${N8N_WEBHOOK_SECRET}
+      - ALLOWED_N8N_IPS=${ALLOWED_N8N_IPS}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - ENABLE_IP_WHITELIST=${ENABLE_IP_WHITELIST:-false}
+      - RATE_LIMIT_REQUESTS=${RATE_LIMIT_REQUESTS:-60}
+      - RATE_LIMIT_WINDOW_SECONDS=${RATE_LIMIT_WINDOW_SECONDS:-60}
+      - MAX_INPUT_LENGTH=${MAX_INPUT_LENGTH:-10000}
+    ports:
+      - "127.0.0.1:8058:8058"  # Only bind to localhost
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data:ro  # Read-only data mount
+      - app_logs:/app/logs
+    networks:
+      - internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8058/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    security_opt:
+      - no-new-privileges:true
+    user: "1000:1000"  # Run as non-root user
+    read_only: true
+    tmpfs:
+      - /tmp:size=100M,noexec,nosuid,nodev
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: agentic-rag-postgres-prod
+    environment:
+      POSTGRES_DB: agentic_rag
+      POSTGRES_USER: raguser
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--auth-host=md5 --auth-local=md5"
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - postgres_logs:/var/log/postgresql
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U raguser -d agentic_rag"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # No external ports exposed - only accessible within Docker network
+    shm_size: 256mb
+    command: >
+      postgres
+      -c shared_preload_libraries=vector
+      -c max_connections=200
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c work_mem=4MB
+      -c min_wal_size=1GB
+      -c max_wal_size=4GB
+      -c log_statement=error
+      -c log_min_duration_statement=1000
+
+  neo4j:
+    image: neo4j:5.15-community
+    container_name: agentic-rag-neo4j-prod
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD}
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_security_procedures_unrestricted: "apoc.*"
+      NEO4J_dbms_security_procedures_allowlist: "apoc.*"
+      NEO4J_dbms_connector_bolt_listen__address: "0.0.0.0:7687"
+      NEO4J_dbms_connector_http_listen__address: "0.0.0.0:7474"
+      NEO4J_dbms_memory_heap_initial__size: "512m"
+      NEO4J_dbms_memory_heap_max__size: "1G"
+      NEO4J_dbms_memory_pagecache_size: "512m"
+      # Security settings
+      NEO4J_dbms_security_auth__minimum__password__length: "8"
+      NEO4J_dbms_logs_security_level: "INFO"
+      # Disable metrics endpoint
+      NEO4J_metrics_enabled: "false"
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_plugins:/plugins
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "${NEO4J_PASSWORD}", "RETURN 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # No external ports exposed - only accessible within Docker network
+
+volumes:
+  postgres_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /var/lib/docker/volumes/agentic-rag-postgres/_data
+  neo4j_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /var/lib/docker/volumes/agentic-rag-neo4j/_data
+  neo4j_logs:
+    driver: local
+  neo4j_plugins:
+    driver: local
+  postgres_logs:
+    driver: local
+  app_logs:
+    driver: local
+
+networks:
+  internal:
+    name: agentic-rag-internal
+    driver: bridge
+    internal: false  # Set to true for complete isolation (no internet access)
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1

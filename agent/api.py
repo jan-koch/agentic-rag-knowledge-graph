@@ -18,6 +18,15 @@ from fastapi.middleware.gzip import GZipMiddleware
 import uvicorn
 from dotenv import load_dotenv
 
+from .security import (
+    validate_n8n_request,
+    verify_n8n_api_key,
+    sanitize_input,
+    get_security_info,
+    SecurityError,
+    security_headers_middleware
+)
+
 from .agent import rag_agent, AgentDependencies
 from .db_utils import (
     initialize_database,
@@ -123,16 +132,23 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Add middleware with flexible CORS
+# Configure CORS based on environment
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",") if os.getenv("ALLOWED_ORIGINS") != "*" else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"]
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-N8N-Signature", "User-Agent"]
 )
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# Add security headers middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    return await security_headers_middleware(request, call_next)
 
 
 # Helper functions for agent execution
@@ -641,7 +657,171 @@ async def get_session_info(session_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# n8n Integration Endpoints
+@app.post("/n8n/chat")
+async def n8n_chat_webhook(request: Request, api_key: str = Depends(verify_n8n_api_key)):
+    """
+    n8n-compatible chat webhook endpoint.
+    Handles incoming questions from n8n Chat Trigger or Webhook nodes.
+    
+    Expected input from n8n:
+    - chatInput: The user's question (from Chat Trigger)
+    - message: Alternative message field
+    - sessionId: Optional session ID for conversation continuity
+    - userId: Optional user ID
+    """
+    try:
+        # Validate n8n request
+        security_info = validate_n8n_request(request)
+        
+        body = await request.json()
+        
+        # Sanitize input
+        body = sanitize_input(body)
+        
+        logger.debug(f"n8n webhook received from {security_info['client_ip']}: {body}")
+        
+        # Extract message from various possible n8n formats
+        message = None
+        session_id = None
+        user_id = None
+        
+        # Handle n8n Chat Trigger format
+        if "chatInput" in body:
+            message = body["chatInput"]
+        # Handle custom webhook format
+        elif "message" in body:
+            message = body["message"]
+        elif "question" in body:
+            message = body["question"]
+        else:
+            # Try to extract from nested structures
+            for key in ["data", "body", "input"]:
+                if key in body and isinstance(body[key], dict):
+                    nested = body[key]
+                    if "chatInput" in nested:
+                        message = nested["chatInput"]
+                        break
+                    elif "message" in nested:
+                        message = nested["message"]
+                        break
+        
+        if not message:
+            raise HTTPException(
+                status_code=400, 
+                detail="No message found. Expected 'chatInput', 'message', or 'question' field"
+            )
+        
+        # Extract optional parameters
+        session_id = body.get("sessionId") or body.get("session_id")
+        user_id = body.get("userId") or body.get("user_id") or "n8n-user"
+        
+        # Create or get session
+        if not session_id:
+            session_id = await create_session(
+                user_id=user_id,
+                metadata={
+                    "source": "n8n",
+                    "client_ip": security_info["client_ip"],
+                    "user_agent": security_info["user_agent"],
+                    "timestamp": datetime.now().isoformat(),
+                    "api_key_used": api_key != "disabled"
+                }
+            )
+        
+        # Execute agent
+        response, tools_used = await execute_agent(
+            message=message,
+            session_id=session_id,
+            user_id=user_id,
+            save_conversation=True
+        )
+        
+        # Return n8n-compatible response
+        return {
+            "response": response,
+            "sessionId": session_id,
+            "userId": user_id,
+            "toolsUsed": len(tools_used),
+            "tools": [
+                {
+                    "name": tool.tool_name,
+                    "args": tool.args
+                }
+                for tool in tools_used
+            ],
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except SecurityError:
+        raise
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"n8n chat webhook failed: {e}")
+        return {
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
+
+@app.post("/n8n/simple")
+async def n8n_simple_webhook(request: Request, api_key: str = Depends(verify_n8n_api_key)):
+    """
+    Simple n8n webhook endpoint for basic question/answer.
+    Returns just the response text for simpler n8n workflows.
+    """
+    try:
+        # Validate n8n request
+        security_info = validate_n8n_request(request)
+        
+        body = await request.json()
+        body = sanitize_input(body)
+        
+        # Extract message
+        message = body.get("message") or body.get("question") or body.get("chatInput")
+        
+        if not message:
+            raise HTTPException(status_code=400, detail="Missing 'message' field")
+        
+        # Create temporary session
+        session_id = await create_session(
+            user_id="n8n-simple",
+            metadata={
+                "source": "n8n-simple",
+                "client_ip": security_info["client_ip"],
+                "user_agent": security_info["user_agent"],
+                "timestamp": datetime.now().isoformat(),
+                "api_key_used": api_key != "disabled"
+            }
+        )
+        
+        # Execute agent
+        response, _ = await execute_agent(
+            message=message,
+            session_id=session_id,
+            user_id="n8n-simple",
+            save_conversation=False  # Don't save for simple endpoint
+        )
+        
+        # Return simple response
+        return {"answer": response}
+        
+    except SecurityError:
+        raise
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"n8n simple webhook failed: {e}")
+        return {"error": str(e)}
+
+
 # Exception handlers
+@app.exception_handler(SecurityError)
+async def security_exception_handler(request: Request, exc: SecurityError):
+    """Handle security exceptions."""
+    return HTTPException(status_code=exc.status_code, detail=exc.detail)
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Global exception handler."""
