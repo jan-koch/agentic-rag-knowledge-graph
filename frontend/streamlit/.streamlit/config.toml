@@ -1,0 +1,29 @@
+[server]
+# Nur auf localhost hören (Sicherheit)
+address = "127.0.0.1"
+port = 8501
+headless = true
+enableCORS = false
+enableXsrfProtection = true
+
+[browser]
+# Statistik-Sammlung deaktivieren
+gatherUsageStats = false
+
+[theme]
+# Standard Theme
+base = "light"
+primaryColor = "#667eea"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f2f6"
+textColor = "#262730"
+
+[global]
+# Development-Einstellungen
+developmentMode = false
+logLevel = "info"
+
+[client]
+# Client-Einstellungen für bessere Performance
+caching = true
+displayEnabled = true

@@ -29,6 +29,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Run specific test modules**: `pytest tests/agent/` or `pytest tests/ingestion/`
 - **Test markers available**: `-m "not slow"`, `-m integration`, `-m unit`
 
+### Production Deployment
+- **Deploy to production**: `./scripts/deploy-production.sh`
+- **Setup Cloudflare tunnel**: `./scripts/setup-cloudflare-tunnel.sh`
+- **Backup PostgreSQL**: `./scripts/backup-database.sh`
+- **Backup Neo4j**: `./scripts/backup-neo4j.sh`
+- **Production compose**: `docker compose -f docker-compose.prod.yml up -d`
+
 ## 🏗 Architecture Overview
 
 This is a hybrid RAG system combining vector search with knowledge graphs, built on:
@@ -37,7 +44,7 @@ This is a hybrid RAG system combining vector search with knowledge graphs, built
 
 **Key Components**:
 - `/agent/` - Pydantic AI agent system with tools, providers, and FastAPI API
-- `/ingestion/` - Document processing pipeline with semantic chunking and graph building  
+- `/ingestion/` - Document processing pipeline with semantic chunking and graph building
 - `/tests/` - Comprehensive test suite with mocks for external dependencies
 - `/cli.py` - Interactive CLI with tool usage visibility and streaming responses
 
@@ -45,9 +52,9 @@ This is a hybrid RAG system combining vector search with knowledge graphs, built
 
 **Provider System**: Flexible LLM support for OpenAI, Ollama, OpenRouter, and Gemini via `agent/providers.py`. Uses separate models for chat vs ingestion (configurable via `LLM_CHOICE` and `INGESTION_LLM_CHOICE`).
 
-**Database Architecture**: 
+**Database Architecture**:
 - PostgreSQL stores documents, chunks with embeddings, sessions, and messages
-- Neo4j (via Graphiti) stores temporal knowledge graph with entities and relationships  
+- Neo4j (via Graphiti) stores temporal knowledge graph with entities and relationships
 - Both use OpenAI-compatible client configuration for consistent API interfaces
 - **Docker Setup**: Automated with `./scripts/docker-setup.sh` - includes health checks and connection verification
 
@@ -56,79 +63,50 @@ This is a hybrid RAG system combining vector search with knowledge graphs, built
 - **Agent configuration**: `agent/prompts.py` controls tool selection behavior
 - **Database utilities**: `agent/db_utils.py` (PostgreSQL) and `agent/graph_utils.py` (Neo4j/Graphiti)
 - **Data models**: `agent/models.py` with Pydantic validation and ToolCall tracking
+- **Security layer**: `agent/security.py` with API key validation and rate limiting
 - **Environment config**: `.env` (created from `.env.example`) with Docker database URLs pre-configured
 - **Database schema**: `sql/schema.sql` with pgvector setup (copied to `docker/postgres/init.sql`)
 - **Docker configuration**: `docker-compose.yml` and `scripts/docker-setup.sh` for containerized databases
+- **n8n integration**: `N8N_INTEGRATION.md` documents webhook endpoints for workflow automation
 
-### 🔄 Project Awareness & Context
-- **Always read `PLANNING.md`** at the start of a new conversation to understand the project's architecture, goals, style, and constraints.
-- **Check `TASK.md`** before starting a new task. If the task isn’t listed, add it with a brief description and today's date.
-- **Use consistent naming conventions, file structure, and architecture patterns** as described in `PLANNING.md`.
+## 🔒 Security Features
 
-### 🧱 Code Structure & Modularity
-- **Never create a file longer than 500 lines of code.** If a file approaches this limit, refactor by splitting it into modules or helper files.
-- **Organize code into clearly separated modules**, grouped by feature or responsibility.
-- **Use clear, consistent imports** (prefer relative imports within packages).
+- **API Authentication**: Configurable API key requirement via `API_KEY_REQUIRED` env var
+- **Rate limiting**: Built-in rate limiting (60 requests/minute default)
+- **CORS configuration**: Controlled via `ALLOWED_ORIGINS` environment variable
+- **Session management**: Automatic timeout and message limits per session
+- **Input validation**: Pydantic models validate all inputs
+- **Security middleware**: See `agent/security.py` for implementation details
 
-### 🧪 Testing & Reliability
-- **Always create Pytest unit tests for new features** (functions, classes, routes, etc).
-- **After updating any logic**, check whether existing unit tests need to be updated. If so, do it.
-- **Tests should live in a `/tests` folder** mirroring the main app structure.
-  - Include at least:
-    - 1 test for expected use
-    - 1 edge case
-    - 1 failure case
-- When testing, always activate the virtual environment in venv_linux and run python commands with 'python3'
+## 🔄 Workflow Integration
 
-### 🔌 MCP Server Usage
+The system provides n8n webhook endpoints for workflow automation:
+- `/n8n/chat` - Full chat with session management and tool tracking
+- `/n8n/simple` - Simple Q&A without session management
+- See `N8N_INTEGRATION.md` for detailed setup instructions
 
-#### Crawl4AI RAG MCP Server
-- **Use for external documentation**: Get docs for Pydantic AI
-- **Always check available sources first**: Use `get_available_sources` to see what's crawled.
-- **Code examples**: Use `search_code_examples` when looking for implementation patterns.
+## 📊 Monitoring and Debugging
 
-#### Neon MCP Server  
-- **Database project management**: Use `create_project` to create new Neon database projects.
-- **Execute SQL**: Use `run_sql` to execute schema and data operations.
-- **Table management**: Use `get_database_tables` and `describe_table_schema` for inspection.
-- **Always specify project ID**: Pass the project ID to all database operations.
-- **Example workflow**:
-  1. `create_project` - create new database project
-  2. `run_sql` with schema SQL - set up tables
-  3. `get_database_tables` - verify schema creation
-  4. Use returned connection string for application config
+- **API logs**: Set `LOG_LEVEL=DEBUG` in `.env` for verbose logging
+- **Tool usage tracking**: All agent tool calls are logged with `ToolCall` models
+- **Session history**: Stored in PostgreSQL with full message/tool tracking
+- **Performance profiling**: Enable with `ENABLE_PROFILING=true`
+- **Test authentication**: Use `test_api_auth.py` to verify API key setup
+- **Test n8n integration**: Use `test_n8n_integration.py` to verify webhook endpoints
 
+## 🚀 Deployment Notes
 
-### ✅ Task Completion
-- **Mark completed tasks in `TASK.md`** immediately after finishing them.
-- Add new sub-tasks or TODOs discovered during development to `TASK.md` under a “Discovered During Work” section.
+- **Production config**: Use `docker-compose.prod.yml` with proper resource limits
+- **Environment separation**: Maintain separate `.env.production` for production
+- **Cloudflare tunnel**: Script available for secure external access
+- **Database backups**: Automated scripts for both PostgreSQL and Neo4j
+- **Security checklist**: Review `SECURITY.md` before production deployment
+- **Deployment guide**: Full instructions in `PRODUCTION_DEPLOYMENT.md`
 
-### 📎 Style & Conventions
-- **Use Python** as the primary language.
-- **Follow PEP8**, use type hints, and format with `black`.
-- **Use `pydantic` for data validation**.
-- Use `FastAPI` for APIs and `SQLAlchemy` or `SQLModel` for ORM if applicable.
-- Write **docstrings for every function** using the Google style:
-  ```python
-  def example():
-      """
-      Brief summary.
+## 📝 Important Configuration Notes
 
-      Args:
-          param1 (type): Description.
-
-      Returns:
-          type: Description.
-      """
-  ```
-
-### 📚 Documentation & Explainability
-- **Update `README.md`** when new features are added, dependencies change, or setup steps are modified.
-- **Comment non-obvious code** and ensure everything is understandable to a mid-level developer.
-- When writing complex logic, **add an inline `# Reason:` comment** explaining the why, not just the what.
-
-### 🧠 AI Behavior Rules
-- **Never assume missing context. Ask questions if uncertain.**
-- **Never hallucinate libraries or functions** – only use known, verified Python packages.
-- **Always confirm file paths and module names** exist before referencing them in code or tests.
-- **Never delete or overwrite existing code** unless explicitly instructed to or if part of a task from `TASK.md`.
+- **Embedding dimensions**: Must match your model (1536 for OpenAI text-embedding-3-small, 768 for nomic-embed-text)
+- **Chunk sizes**: Optimized for Graphiti token limits (800 default, 1500 max)
+- **Session limits**: Configurable timeout (60 min) and message limits (100 max)
+- **File processing**: Supports `.md` and `.txt` files up to 10MB
+- **Vector search**: Returns up to 10 results by default (configurable)

@@ -45,6 +45,68 @@ class SearchRequest(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
 
 
+# OpenAI-compatible Models for Open WebUI integration
+class OpenAIMessage(BaseModel):
+    """OpenAI-compatible message model."""
+    role: Literal["user", "assistant", "system"] = Field(..., description="Message role")
+    content: str = Field(..., description="Message content")
+
+class OpenAIChatRequest(BaseModel):
+    """OpenAI-compatible chat completion request."""
+    model: str = Field(default="riddly-rag", description="Model identifier")
+    messages: List[OpenAIMessage] = Field(..., description="List of messages")
+    temperature: Optional[float] = Field(default=0.7, ge=0, le=2, description="Sampling temperature")
+    max_tokens: Optional[int] = Field(default=2000, ge=1, description="Maximum tokens to generate")
+    stream: Optional[bool] = Field(default=False, description="Whether to stream responses")
+    search_type: Optional[SearchType] = Field(default=SearchType.HYBRID, description="RAG search type")
+
+class OpenAIChoice(BaseModel):
+    """OpenAI-compatible choice model."""
+    index: int = Field(..., description="Choice index")
+    message: OpenAIMessage = Field(..., description="Generated message")
+    finish_reason: Literal["stop", "length", "content_filter"] = Field(..., description="Why generation stopped")
+
+class OpenAIUsage(BaseModel):
+    """OpenAI-compatible usage model."""
+    prompt_tokens: int = Field(..., description="Tokens in prompt")
+    completion_tokens: int = Field(..., description="Tokens in completion")
+    total_tokens: int = Field(..., description="Total tokens used")
+
+class OpenAIChatResponse(BaseModel):
+    """OpenAI-compatible chat completion response."""
+    id: str = Field(..., description="Unique identifier")
+    object: Literal["chat.completion"] = Field(default="chat.completion", description="Object type")
+    created: int = Field(..., description="Unix timestamp")
+    model: str = Field(..., description="Model used")
+    choices: List[OpenAIChoice] = Field(..., description="Generated choices")
+    usage: OpenAIUsage = Field(..., description="Token usage")
+
+class OpenAIStreamChoice(BaseModel):
+    """OpenAI-compatible streaming choice model."""
+    index: int = Field(..., description="Choice index")
+    delta: Dict[str, Any] = Field(..., description="Delta update")
+    finish_reason: Optional[Literal["stop", "length", "content_filter"]] = Field(None, description="Why generation stopped")
+
+class OpenAIStreamResponse(BaseModel):
+    """OpenAI-compatible streaming response."""
+    id: str = Field(..., description="Unique identifier")
+    object: Literal["chat.completion.chunk"] = Field(default="chat.completion.chunk", description="Object type")
+    created: int = Field(..., description="Unix timestamp")
+    model: str = Field(..., description="Model used")
+    choices: List[OpenAIStreamChoice] = Field(..., description="Generated choices")
+
+class OpenAIModel(BaseModel):
+    """OpenAI-compatible model information."""
+    id: str = Field(..., description="Model identifier")
+    object: Literal["model"] = Field(default="model", description="Object type")
+    created: int = Field(..., description="Unix timestamp")
+    owned_by: str = Field(..., description="Model owner")
+
+class OpenAIModelList(BaseModel):
+    """OpenAI-compatible model list response."""
+    object: Literal["list"] = Field(default="list", description="Object type")
+    data: List[OpenAIModel] = Field(..., description="Available models")
+
 # Response Models
 class DocumentMetadata(BaseModel):
     """Document metadata model."""

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Widget Example</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: white;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 40px;
+            border-radius: 16px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        
+        .demo-section {
+            margin: 30px 0;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        h2 {
+            color: #fff;
+            margin-top: 0;
+        }
+        
+        .code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 14px;
+            overflow-x: auto;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .instructions {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid #fff;
+        }
+        
+        .widget-themes {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        
+        .theme-demo {
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        button {
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+            transition: transform 0.1s;
+        }
+        
+        button:hover {
+            transform: translateY(-1px);
+        }
+        
+        .note {
+            background: rgba(255, 193, 7, 0.1);
+            border: 1px solid rgba(255, 193, 7, 0.3);
+            color: #fff3cd;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            opacity: 0.8;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 Agentic RAG Chat Widget</h1>
+        
+        <div class="instructions">
+            <strong>📋 Setup Instructions:</strong>
+            <ol>
+                <li>Start your Agentic RAG API server on <code>localhost:8058</code></li>
+                <li>Update the <code>apiKey</code> in the widget configuration below</li>
+                <li>The chat widget will appear in the bottom-right corner</li>
+                <li>Click the chat bubble to start a conversation!</li>
+            </ol>
+        </div>
+
+        <div class="demo-section">
+            <h2>🎨 Widget Themes</h2>
+            <p>The widget supports light and dark themes. Click the buttons below to see both:</p>
+            
+            <div class="widget-themes">
+                <div class="theme-demo">
+                    <h3>Light Theme (Default)</h3>
+                    <button onclick="switchToLight()">Switch to Light Theme</button>
+                    <p>Clean, bright interface perfect for most websites.</p>
+                </div>
+                
+                <div class="theme-demo">
+                    <h3>Dark Theme</h3>
+                    <button onclick="switchToDark()">Switch to Dark Theme</button>
+                    <p>Sleek dark interface for modern applications.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>📝 Embedding Code</h2>
+            <p>To embed this widget on your website, add this code before the closing <code>&lt;/body&gt;</code> tag:</p>
+            
+            <div class="code">
+&lt;script src="https://your-domain.com/chat-widget.js">&lt;/script&gt;
+&lt;script&gt;
+  new ChatWidget({
+    apiUrl: 'http://localhost:8058',
+    apiKey: 'your-secure-api-key-here',
+    theme: 'light', // or 'dark'
+    title: 'AI Assistant',
+    welcomeMessage: 'Hi! How can I help you today?',
+    placeholder: 'Ask me anything...'
+  });
+&lt;/script&gt;
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>⚙️ Configuration Options</h2>
+            <div class="code">
+{
+  apiUrl: 'http://localhost:8058',    // Your API server URL
+  apiKey: 'your-api-key',             // Required: Your API key
+  theme: 'light',                     // 'light' or 'dark'
+  position: 'bottom-right',           // 'bottom-right' or 'bottom-left'
+  width: '400px',                     // Widget width
+  height: '600px',                    // Widget height
+  title: 'AI Assistant',              // Header title
+  welcomeMessage: 'Hi! How can I help?', // First message
+  placeholder: 'Ask me anything...',  // Input placeholder
+  containerId: null                   // Optional: specific container
+}
+            </div>
+        </div>
+
+        <div class="note">
+            <strong>⚠️ Note:</strong> Make sure your API server is running and has CORS properly configured to allow requests from your domain. The widget uses the streaming chat endpoint for real-time responses.
+        </div>
+
+        <div class="footer">
+            <p>🚀 Powered by Agentic RAG with Knowledge Graph</p>
+        </div>
+    </div>
+
+    <!-- Chat Widget -->
+    <script src="chat-widget.js"></script>
+    <script>
+        // Initialize the widget with your configuration
+        let currentWidget = new ChatWidget({
+            apiUrl: 'http://localhost:8058',
+            apiKey: 'your-secure-api-key-here', // ⚠️ UPDATE THIS
+            theme: 'light',
+            title: 'AI Assistant',
+            welcomeMessage: 'Hi! I\'m your AI assistant. I can help you search through documents and answer questions using both vector search and knowledge graphs. What would you like to know?',
+            placeholder: 'Ask me anything about the documents...'
+        });
+
+        // Demo functions for theme switching
+        function switchToLight() {
+            document.querySelector('.chat-widget-container').remove();
+            currentWidget = new ChatWidget({
+                apiUrl: 'http://localhost:8058',
+                apiKey: 'your-secure-api-key-here',
+                theme: 'light',
+                title: 'AI Assistant (Light)',
+                welcomeMessage: 'Switched to light theme! How can I help you?'
+            });
+        }
+
+        function switchToDark() {
+            document.querySelector('.chat-widget-container').remove();
+            currentWidget = new ChatWidget({
+                apiUrl: 'http://localhost:8058',
+                apiKey: 'your-secure-api-key-here',
+                theme: 'dark',
+                title: 'AI Assistant (Dark)',
+                welcomeMessage: 'Switched to dark theme! How can I help you?'
+            });
+        }
+    </script>
+</body>
+</html>

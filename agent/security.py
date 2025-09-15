@@ -17,6 +17,8 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 logger = logging.getLogger(__name__)
 
 # Security configuration from environment
+API_KEY = os.getenv("API_KEY")  # Main API key for all endpoints
+API_KEY_REQUIRED = os.getenv("API_KEY_REQUIRED", "true").lower() == "true"
 N8N_API_KEY = os.getenv("N8N_API_KEY")
 N8N_WEBHOOK_SECRET = os.getenv("N8N_WEBHOOK_SECRET")
 ALLOWED_N8N_IPS = os.getenv("ALLOWED_N8N_IPS", "").split(",") if os.getenv("ALLOWED_N8N_IPS") else []
@@ -190,6 +192,48 @@ def validate_n8n_request(request: Request) -> Dict[str, Any]:
         "timestamp": datetime.now(),
         "source": "n8n"
     }
+
+
+async def verify_api_key(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> str:
+    """
+    Verify API key authentication for general endpoints.
+    
+    Args:
+        credentials: HTTP Bearer credentials
+        
+    Returns:
+        Validated API key
+        
+    Raises:
+        HTTPException: If authentication fails
+    """
+    # Skip API key check if not required (for development)
+    if not API_KEY_REQUIRED:
+        return "not_required"
+    
+    if not API_KEY:
+        logger.error("API_KEY not configured but API_KEY_REQUIRED is true")
+        raise HTTPException(
+            status_code=500,
+            detail="Server configuration error - API key not set"
+        )
+    
+    if not credentials:
+        raise HTTPException(
+            status_code=401,
+            detail="Missing API key",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    
+    if not hmac.compare_digest(credentials.credentials, API_KEY):
+        logger.warning(f"Invalid API key attempted from {credentials.credentials[:8]}...")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid API key",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    
+    return credentials.credentials
 
 
 async def verify_n8n_api_key(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> str:

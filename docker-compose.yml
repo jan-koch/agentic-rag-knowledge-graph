@@ -22,7 +22,7 @@ services:
     restart: unless-stopped
 
   neo4j:
-    image: neo4j:5.15-community
+    image: neo4j:5.23-community
     container_name: agentic-rag-neo4j
     environment:
       NEO4J_AUTH: neo4j/password
@@ -44,6 +44,56 @@ services:
       retries: 10
     restart: unless-stopped
 
+  cloudflared:
+    container_name: agentic-rag-cft
+    restart: always
+    network_mode: host
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run --token
+            eyJhIjoiNzFhMjZkYzRjNjJjZjlhYTY2OGQ1OWEzOWI1ODZiZjUiLCJ0IjoiODMyZjgzMDgtNWY2ZC00YmIxLThiN2ItODBlZmVmNWI3ZWFjIiwicyI6IllqQTJPR1kyTmprdE5ETXlaaTAwTURaa0xUbGxOVGd0TnpGbVpqZGhNVEEzWkRJNCJ9
+
+  cloudflared-ui:
+    container_name: agentic-rag-ui-cft
+    restart: always
+    network_mode: host
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run --token
+            eyJhIjoiNzFhMjZkYzRjNjJjZjlhYTY2OGQ1OWEzOWI1ODZiZjUiLCJ0IjoiZjIxMjA3NzQtYzQxYS00Y2RjLWIxMjctMjAzNWZiNWVmZWRmIiwicyI6Ik0yWTNNMk14T0RjdE5tWmxZaTAwTldGakxUaG1NR1F0TVRVMU9EYzBPVEl6T0RabCJ9
+
+  open-webui:
+    container_name: agentic-rag-open-webui
+    image: ghcr.io/open-webui/open-webui:main
+    ports:
+      - "3000:8080"
+    environment:
+      # Open WebUI Configuration
+      - OLLAMA_BASE_URL=disabled
+      - OPENAI_API_BASE_URL=https://riddly.kobra-dataworks.de/v1
+      - OPENAI_API_KEY=J_qfzc5WsTZ5GgyyOhFGplfI7zoDSFrY0XqTitDadmE
+      - WEBUI_NAME=Riddly AI Chat
+      - WEBUI_URL=http://localhost:3000
+      - ENABLE_SIGNUP=true
+      - DEFAULT_USER_ROLE=user
+      # Security & Features
+      - ENABLE_LOGIN_FORM=true
+      - ENABLE_OAUTH_SIGNUP=false
+      - ENABLE_API_KEY=true
+      # Model Configuration
+      - DEFAULT_MODELS=riddly-rag
+      - ENABLE_MODEL_FILTER=true
+      - MODEL_FILTER_LIST=riddly-rag;riddly-rag-vector;riddly-rag-graph
+    volumes:
+      - open_webui_data:/app/backend/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      - postgres
+      - neo4j
+
 volumes:
   postgres_data:
     driver: local
@@ -54,6 +104,8 @@ volumes:
   neo4j_import:
     driver: local
   neo4j_plugins:
+    driver: local
+  open_webui_data:
     driver: local
 
 networks:

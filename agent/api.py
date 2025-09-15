@@ -21,6 +21,7 @@ from dotenv import load_dotenv
 from .security import (
     validate_n8n_request,
     verify_n8n_api_key,
+    verify_api_key,
     sanitize_input,
     get_security_info,
     SecurityError,
@@ -46,7 +47,16 @@ from .models import (
     StreamDelta,
     ErrorResponse,
     HealthStatus,
-    ToolCall
+    ToolCall,
+    OpenAIChatRequest,
+    OpenAIChatResponse,
+    OpenAIStreamResponse,
+    OpenAIModelList,
+    OpenAIModel,
+    OpenAIChoice,
+    OpenAIStreamChoice,
+    OpenAIMessage,
+    OpenAIUsage
 )
 from .tools import (
     vector_search_tool,
@@ -66,7 +76,7 @@ logger = logging.getLogger(__name__)
 
 # Application configuration
 APP_ENV = os.getenv("APP_ENV", "development")
-APP_HOST = os.getenv("APP_HOST", "0.0.0.0")
+APP_HOST = os.getenv("APP_HOST", "127.0.0.1")  # Only listen on localhost
 APP_PORT = int(os.getenv("APP_PORT", 8000))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
@@ -402,7 +412,7 @@ async def health_check():
 
 
 @app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, api_key: str = Depends(verify_api_key)):
     """Non-streaming chat endpoint."""
     try:
         # Get or create session
@@ -428,7 +438,7 @@ async def chat(request: ChatRequest):
 
 
 @app.post("/chat/stream")
-async def chat_stream(request: ChatRequest):
+async def chat_stream(request: ChatRequest, api_key: str = Depends(verify_api_key)):
     """Streaming chat endpoint using Server-Sent Events."""
     try:
         # Get or create session
@@ -525,7 +535,7 @@ async def chat_stream(request: ChatRequest):
         
         return StreamingResponse(
             generate_stream(),
-            media_type="text/plain",
+            media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
@@ -539,7 +549,7 @@ async def chat_stream(request: ChatRequest):
 
 
 @app.post("/search/vector")
-async def search_vector(request: SearchRequest):
+async def search_vector(request: SearchRequest, api_key: str = Depends(verify_api_key)):
     """Vector search endpoint."""
     try:
         input_data = VectorSearchInput(
@@ -566,7 +576,7 @@ async def search_vector(request: SearchRequest):
 
 
 @app.post("/search/graph")
-async def search_graph(request: SearchRequest):
+async def search_graph(request: SearchRequest, api_key: str = Depends(verify_api_key)):
     """Knowledge graph search endpoint."""
     try:
         input_data = GraphSearchInput(
@@ -592,7 +602,7 @@ async def search_graph(request: SearchRequest):
 
 
 @app.post("/search/hybrid")
-async def search_hybrid(request: SearchRequest):
+async def search_hybrid(request: SearchRequest, api_key: str = Depends(verify_api_key)):
     """Hybrid search endpoint."""
     try:
         input_data = HybridSearchInput(
@@ -621,7 +631,8 @@ async def search_hybrid(request: SearchRequest):
 @app.get("/documents")
 async def list_documents_endpoint(
     limit: int = 20,
-    offset: int = 0
+    offset: int = 0,
+    api_key: str = Depends(verify_api_key)
 ):
     """List documents endpoint."""
     try:
@@ -641,7 +652,7 @@ async def list_documents_endpoint(
 
 
 @app.get("/sessions/{session_id}")
-async def get_session_info(session_id: str):
+async def get_session_info(session_id: str, api_key: str = Depends(verify_api_key)):
     """Get session information."""
     try:
         session = await get_session(session_id)
@@ -814,6 +825,241 @@ async def n8n_simple_webhook(request: Request, api_key: str = Depends(verify_n8n
     except Exception as e:
         logger.error(f"n8n simple webhook failed: {e}")
         return {"error": str(e)}
+
+
+# OpenAI-Compatible Endpoints for Open WebUI integration
+
+@app.get("/v1/models", response_model=OpenAIModelList)
+async def list_models(api_key: str = Depends(verify_api_key)):
+    """List available models (OpenAI-compatible endpoint)."""
+    models = [
+        OpenAIModel(
+            id="riddly-rag",
+            created=int(datetime.now().timestamp()),
+            owned_by="riddly"
+        ),
+        OpenAIModel(
+            id="riddly-rag-vector",
+            created=int(datetime.now().timestamp()),
+            owned_by="riddly"
+        ),
+        OpenAIModel(
+            id="riddly-rag-graph",
+            created=int(datetime.now().timestamp()),
+            owned_by="riddly"
+        )
+    ]
+    
+    return OpenAIModelList(data=models)
+
+
+async def convert_openai_to_internal(openai_request: OpenAIChatRequest) -> tuple[str, str]:
+    """Convert OpenAI request to internal format."""
+    # Extract the latest user message
+    user_messages = [msg for msg in openai_request.messages if msg.role == "user"]
+    if not user_messages:
+        raise HTTPException(status_code=400, detail="No user message found")
+    
+    latest_message = user_messages[-1].content
+    
+    # Determine search type from model name
+    search_type = "hybrid"  # default
+    if "vector" in openai_request.model:
+        search_type = "vector"
+    elif "graph" in openai_request.model:
+        search_type = "graph"
+    
+    return latest_message, search_type
+
+
+def estimate_tokens(text: str) -> int:
+    """Simple token estimation (rough approximation)."""
+    return len(text.split()) * 1.3
+
+
+@app.post("/v1/chat/completions")
+async def openai_chat_completions(request: OpenAIChatRequest, raw_request: Request, api_key: str = Depends(verify_api_key)):
+    """OpenAI-compatible chat completions endpoint."""
+    import time
+    start_time = time.time()
+    
+    try:
+        # Debug logging for Open WebUI requests
+        client_ip = raw_request.client.host if raw_request.client else "unknown"
+        user_agent = raw_request.headers.get("user-agent", "unknown")
+        logger.info(f"OpenAI chat completions request from {client_ip} (UA: {user_agent[:50]}...): model={request.model}, stream={request.stream}, messages={len(request.messages)} messages")
+        logger.debug(f"Full request: {request.model_dump()}")
+        logger.debug(f"Request headers: {dict(raw_request.headers)}")
+        
+        # Convert request format
+        message, search_type = await convert_openai_to_internal(request)
+        
+        if request.stream:
+            logger.info(f"Using streaming response for Open WebUI request: {message[:50]}...")
+            # Return streaming response
+            return StreamingResponse(
+                openai_chat_stream(request, message, search_type),
+                media_type="text/event-stream"
+            )
+        else:
+            logger.info(f"Using non-streaming response for Open WebUI request: {message[:50]}...")
+            # Execute agent
+            response, tools_used = await execute_agent(
+                message=message,
+                session_id=None,  # OpenAI API typically doesn't use sessions
+                user_id="openai-api",
+                save_conversation=False
+            )
+            
+            # Estimate token usage
+            prompt_tokens = estimate_tokens(message)
+            completion_tokens = estimate_tokens(response)
+            
+            # Build OpenAI-compatible response
+            end_time = time.time()
+            response_time = end_time - start_time
+            logger.info(f"Non-streaming response completed in {response_time:.2f}s - Response length: {len(response)} chars, Tools used: {len(tools_used)}")
+            
+            final_response = OpenAIChatResponse(
+                id=f"chatcmpl-{uuid.uuid4()}",
+                created=int(datetime.now().timestamp()),
+                model=request.model,
+                choices=[
+                    OpenAIChoice(
+                        index=0,
+                        message=OpenAIMessage(role="assistant", content=response),
+                        finish_reason="stop"
+                    )
+                ],
+                usage=OpenAIUsage(
+                    prompt_tokens=int(prompt_tokens),
+                    completion_tokens=int(completion_tokens),
+                    total_tokens=int(prompt_tokens + completion_tokens)
+                )
+            )
+            
+            logger.debug(f"Final response object: {final_response.model_dump()}")
+            return final_response
+            
+    except Exception as e:
+        logger.error(f"OpenAI chat completions failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def openai_chat_stream(request: OpenAIChatRequest, message: str, search_type: str):
+    """Generate OpenAI-compatible streaming response."""
+    import json
+    import time
+    
+    stream_start = time.time()
+    chunk_count = 0
+    total_chars = 0
+    
+    logger.info(f"Starting OpenAI streaming for: {message[:50]}... (model: {request.model})")
+    
+    response_id = f"chatcmpl-{uuid.uuid4()}"
+    created = int(datetime.now().timestamp())
+    
+    try:
+        # Start streaming response
+        yield f"data: {json.dumps(OpenAIStreamResponse(id=response_id, created=created, model=request.model, choices=[OpenAIStreamChoice(index=0, delta={'role': 'assistant'}, finish_reason=None)]).model_dump())}\n\n"
+        
+        # Create dependencies
+        deps = AgentDependencies(
+            session_id=f"openai-stream-{uuid.uuid4()}",
+            user_id="openai-api"
+        )
+        
+        full_response = ""
+        
+        # Stream using agent.iter() pattern
+        async with rag_agent.iter(message, deps=deps) as run:
+            async for node in run:
+                if rag_agent.is_model_request_node(node):
+                    # Stream tokens from the model
+                    async with node.stream(run.ctx) as request_stream:
+                        async for event in request_stream:
+                            from pydantic_ai.messages import PartStartEvent, PartDeltaEvent, TextPartDelta
+                            
+                            if isinstance(event, PartStartEvent) and event.part.part_kind == 'text':
+                                delta_content = event.part.content
+                                chunk_count += 1
+                                total_chars += len(delta_content)
+                                logger.debug(f"Stream chunk {chunk_count}: {len(delta_content)} chars")
+                                
+                                chunk_response = OpenAIStreamResponse(
+                                    id=response_id,
+                                    created=created,
+                                    model=request.model,
+                                    choices=[
+                                        OpenAIStreamChoice(
+                                            index=0,
+                                            delta={"content": delta_content},
+                                            finish_reason=None
+                                        )
+                                    ]
+                                )
+                                yield f"data: {json.dumps(chunk_response.model_dump())}\n\n"
+                                full_response += delta_content
+                                
+                            elif isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):
+                                delta_content = event.delta.content_delta
+                                chunk_count += 1
+                                total_chars += len(delta_content)
+                                logger.debug(f"Stream chunk {chunk_count}: {len(delta_content)} chars")
+                                
+                                chunk_response = OpenAIStreamResponse(
+                                    id=response_id,
+                                    created=created,
+                                    model=request.model,
+                                    choices=[
+                                        OpenAIStreamChoice(
+                                            index=0,
+                                            delta={"content": delta_content},
+                                            finish_reason=None
+                                        )
+                                    ]
+                                )
+                                yield f"data: {json.dumps(chunk_response.model_dump())}\n\n"
+                                full_response += delta_content
+        
+        # Send final chunk
+        final_response = OpenAIStreamResponse(
+            id=response_id,
+            created=created,
+            model=request.model,
+            choices=[
+                OpenAIStreamChoice(
+                    index=0,
+                    delta={},
+                    finish_reason="stop"
+                )
+            ]
+        )
+        
+        yield f"data: {json.dumps(final_response.model_dump())}\n\n"
+        yield "data: [DONE]\n\n"
+        
+        stream_end = time.time()
+        stream_time = stream_end - stream_start
+        logger.info(f"Streaming completed: {chunk_count} chunks, {total_chars} total chars, {stream_time:.2f}s total time")
+        
+    except Exception as e:
+        logger.error(f"OpenAI streaming failed: {e}")
+        error_response = OpenAIStreamResponse(
+            id=response_id,
+            created=created,
+            model=request.model,
+            choices=[
+                OpenAIStreamChoice(
+                    index=0,
+                    delta={"content": f"Error: {str(e)}"},
+                    finish_reason="stop"
+                )
+            ]
+        )
+        yield f"data: {json.dumps(error_response.model_dump())}\n\n"
+        yield "data: [DONE]\n\n"
 
 
 # Exception handlers

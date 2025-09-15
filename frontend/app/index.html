@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agentic RAG Chat Interface</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                        <rect width="32" height="32" rx="8" fill="url(#gradient)"/>
+                        <path d="M8 12h16v2H8v-2zm0 4h16v2H8v-2zm0 4h12v2H8v-2z" fill="white"/>
+                        <defs>
+                            <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#667eea"/>
+                                <stop offset="100%" stop-color="#764ba2"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                    <h1>Agentic RAG</h1>
+                </div>
+                <button class="new-chat-btn" id="newChatBtn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    New Chat
+                </button>
+            </div>
+            
+            <div class="chat-history" id="chatHistory">
+                <h3>Recent Conversations</h3>
+                <div class="history-list" id="historyList">
+                    <!-- Chat history items will be added here -->
+                </div>
+            </div>
+            
+            <div class="sidebar-footer">
+                <div class="search-type-selector">
+                    <label>Search Type:</label>
+                    <select id="searchTypeSelect">
+                        <option value="hybrid">🔀 Hybrid (Recommended)</option>
+                        <option value="vector">📊 Vector Search</option>
+                        <option value="graph">🕸️ Knowledge Graph</option>
+                    </select>
+                </div>
+                
+                <div class="status-indicator">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span id="statusText">Connecting...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Chat Area -->
+        <div class="main-content">
+            <div class="chat-header">
+                <button class="sidebar-toggle" id="sidebarToggle">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </svg>
+                </button>
+                
+                <div class="chat-title">
+                    <h2 id="chatTitle">AI Assistant</h2>
+                    <span class="session-info" id="sessionInfo">Ready to help</span>
+                </div>
+                
+                <div class="chat-controls">
+                    <button class="control-btn" id="exportBtn" title="Export Chat">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7,10 12,15 17,10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                    </button>
+                    <button class="control-btn" id="settingsBtn" title="Settings">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="m12 1 1.88 1.88L16 2.46l.54 2.12L19 4.88l-1.88 1.88L17.54 9l-2.12.54L15.12 12l1.88 1.88L16 16.54l-2.12.54L12 19.88l-1.88-1.88L8 17.54l-.54-2.12L5 15.12l1.88-1.88L6.46 11l2.12-.54L8.88 8l-1.88-1.88L8 3.46l2.12-.54L12 1z"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="chat-messages" id="chatMessages">
+                <div class="welcome-message">
+                    <div class="welcome-icon">
+                        <svg width="48" height="48" viewBox="0 0 32 32" fill="none">
+                            <rect width="32" height="32" rx="8" fill="url(#welcomeGradient)"/>
+                            <path d="M8 12h16v2H8v-2zm0 4h16v2H8v-2zm0 4h12v2H8v-2z" fill="white"/>
+                            <defs>
+                                <linearGradient id="welcomeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" stop-color="#667eea"/>
+                                    <stop offset="100%" stop-color="#764ba2"/>
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                    </div>
+                    <h3>Welcome to Agentic RAG!</h3>
+                    <p>I'm your AI assistant powered by hybrid search combining vector embeddings and knowledge graphs. I can help you:</p>
+                    <ul>
+                        <li>🔍 Search through documents using semantic understanding</li>
+                        <li>🕸️ Find relationships between entities and concepts</li>
+                        <li>📊 Analyze data using multiple search strategies</li>
+                        <li>💡 Answer complex questions with contextual awareness</li>
+                    </ul>
+                    <p>Ask me anything to get started!</p>
+                </div>
+            </div>
+            
+            <div class="chat-input-container">
+                <form class="chat-input-form" id="chatForm">
+                    <div class="input-wrapper">
+                        <textarea
+                            id="messageInput"
+                            placeholder="Ask me anything..."
+                            rows="1"
+                            maxlength="4000"
+                        ></textarea>
+                        <div class="input-actions">
+                            <div class="char-count">
+                                <span id="charCount">0</span>/4000
+                            </div>
+                            <button type="submit" class="send-btn" id="sendBtn" disabled>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                                    <polygon points="22,2 15,22 11,13 2,9 22,2"></polygon>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal" id="settingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Settings</h3>
+                <button class="modal-close" id="closeSettingsModal">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-group">
+                    <label for="apiUrlInput">API URL:</label>
+                    <input type="url" id="apiUrlInput" value="http://localhost:8058" />
+                </div>
+                <div class="setting-group">
+                    <label for="apiKeyInput">API Key:</label>
+                    <input type="password" id="apiKeyInput" placeholder="Enter your API key" />
+                    <small>Your API key is stored locally and never sent to third parties.</small>
+                </div>
+                <div class="setting-group">
+                    <label for="themeSelect">Theme:</label>
+                    <select id="themeSelect">
+                        <option value="light">Light</option>
+                        <option value="dark">Dark</option>
+                        <option value="auto">Auto (System)</option>
+                    </select>
+                </div>
+                <div class="setting-group">
+                    <label>
+                        <input type="checkbox" id="streamingCheckbox" checked>
+                        Enable streaming responses
+                    </label>
+                </div>
+                <div class="setting-group">
+                    <label>
+                        <input type="checkbox" id="soundCheckbox">
+                        Sound notifications
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="resetSettingsBtn">Reset to Defaults</button>
+                <button class="btn btn-primary" id="saveSettingsBtn">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <p>Connecting to server...</p>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
