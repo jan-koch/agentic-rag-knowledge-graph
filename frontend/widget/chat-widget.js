@@ -1,5 +1,5 @@
 /**
- * Embeddable Chat Widget for Agentic RAG System
+ * Einbettbares Chat-Widget für Riddly Assistant
  * 
  * Usage:
  * <script src="path/to/chat-widget.js"></script>
@@ -24,9 +24,9 @@ class ChatWidget {
       position: config.position || 'bottom-right',
       width: config.width || '400px',
       height: config.height || '600px',
-      title: config.title || 'AI Assistant',
-      placeholder: config.placeholder || 'Ask me anything...',
-      welcomeMessage: config.welcomeMessage || 'Hi! How can I help you today?'
+      title: config.title || 'Riddly Assistant',
+      placeholder: config.placeholder || 'Stellen Sie mir eine Frage...',
+      welcomeMessage: config.welcomeMessage || 'Hallo! Wie kann ich Ihnen heute helfen?'
     };
 
     this.sessionId = null;
@@ -430,7 +430,7 @@ class ChatWidget {
       await this.sendMessage(message);
     } catch (error) {
       this.hideTypingIndicator();
-      this.addMessage('assistant', 'Sorry, I encountered an error. Please try again.');
+      this.addMessage('assistant', 'Entschuldigung, es ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.');
       this.addError(`Error: ${error.message}`);
     }
   }
@@ -519,7 +519,7 @@ class ChatWidget {
     if (tools && tools.length > 0) {
       const toolInfo = document.createElement('div');
       toolInfo.className = 'chat-widget-tools';
-      toolInfo.textContent = `Used tools: ${tools.map(t => t.tool_name).join(', ')}`;
+      toolInfo.textContent = `Verwendete Tools: ${tools.map(t => t.tool_name).join(', ')}`;
       messageContainer.appendChild(toolInfo);
     }
 
@@ -534,7 +534,7 @@ class ChatWidget {
     
     const avatar = document.createElement('div');
     avatar.className = 'chat-message-avatar';
-    avatar.textContent = role === 'user' ? 'U' : 'AI';
+    avatar.textContent = role === 'user' ? 'Sie' : 'R';
     
     const messageContent = document.createElement('div');
     messageContent.className = 'chat-message-content';
@@ -569,7 +569,7 @@ class ChatWidget {
     
     const avatar = document.createElement('div');
     avatar.className = 'chat-message-avatar';
-    avatar.textContent = 'AI';
+    avatar.textContent = 'R';
     
     const indicator = document.createElement('div');
     indicator.className = 'chat-typing-indicator';
