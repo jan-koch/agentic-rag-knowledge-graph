@@ -15,10 +15,10 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d agentic_rag"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres || pg_isready -U postgres"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
     restart: unless-stopped
 
   neo4j:

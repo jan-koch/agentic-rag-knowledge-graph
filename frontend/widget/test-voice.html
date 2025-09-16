@@ -238,7 +238,7 @@
             <div class="config-grid">
                 <div class="config-item">
                     <label for="apiUrl">API URL:</label>
-                    <input type="text" id="apiUrl" value="http://localhost:8058" placeholder="http://localhost:8058">
+                    <input type="text" id="apiUrl" value="https://riddly.kobra-dataworks.de" placeholder="https://riddly.kobra-dataworks.de">
                 </div>
 
                 <div class="config-item">
@@ -340,6 +340,9 @@
             const savedApiKey = localStorage.getItem('riddly_api_key');
             if (savedApiKey) {
                 document.getElementById('apiKey').value = savedApiKey;
+            } else {
+                // Hardcode API key for testing
+                document.getElementById('apiKey').value = 'J_qfzc5WsTZ5GgyyOhFGplfI7zoDSFrY0XqTitDadmE';
             }
         });
 
