@@ -268,6 +268,9 @@ class ChatWidget {
         align-items: center;
         justify-content: center;
         transition: transform 0.2s, box-shadow 0.2s;
+        color: white;
+        font-size: 24px;
+        font-weight: bold;
       }
 
       .chat-widget-trigger:hover {
@@ -275,12 +278,6 @@ class ChatWidget {
         box-shadow: 0 6px 16px rgba(0,0,0,0.2);
       }
 
-      .chat-widget-trigger svg {
-        width: 24px;
-        height: 24px;
-        fill: white;
-        pointer-events: none;
-      }
 
       .chat-widget-panel {
         position: absolute;
@@ -343,9 +340,12 @@ class ChatWidget {
         background: none;
         border: none;
         cursor: pointer;
-        padding: 4px;
+        padding: 4px 8px;
         border-radius: 4px;
         color: ${this.config.theme === 'dark' ? '#888' : '#666'};
+        font-size: 18px;
+        font-weight: bold;
+        line-height: 1;
       }
 
       .chat-widget-close:hover {
@@ -427,6 +427,7 @@ class ChatWidget {
         align-items: center;
         justify-content: center;
         transition: all 0.2s;
+        font-size: 14px;
       }
 
       .chat-message.assistant:hover .speak-button {
@@ -443,16 +444,6 @@ class ChatWidget {
         border-color: #4caf50;
       }
 
-      .speak-button svg {
-        width: 14px;
-        height: 14px;
-        fill: ${this.config.theme === 'dark' ? '#aaa' : '#666'};
-        pointer-events: none;
-      }
-
-      .speak-button.speaking svg {
-        fill: white;
-      }
 
       .chat-widget-input-container {
         padding: 16px;
@@ -551,6 +542,8 @@ class ChatWidget {
         align-items: center;
         justify-content: center;
         transition: all 0.2s;
+        font-size: 20px;
+        color: ${this.config.theme === 'dark' ? '#aaa' : '#666'};
       }
 
       .chat-widget-mic:hover {
@@ -570,15 +563,8 @@ class ChatWidget {
         100% { box-shadow: 0 0 0 0 rgba(244, 67, 54, 0); }
       }
 
-      .chat-widget-mic svg {
-        width: 18px;
-        height: 18px;
-        fill: ${this.config.theme === 'dark' ? '#aaa' : '#666'};
-        pointer-events: none;
-      }
-
-      .chat-widget-mic.recording svg {
-        fill: white;
+      .chat-widget-mic.recording {
+        color: white;
       }
 
       .chat-widget-send {
@@ -592,6 +578,9 @@ class ChatWidget {
         align-items: center;
         justify-content: center;
         transition: transform 0.1s;
+        color: white;
+        font-size: 18px;
+        font-weight: bold;
       }
 
       .chat-widget-send:hover {
@@ -604,12 +593,6 @@ class ChatWidget {
         transform: none;
       }
 
-      .chat-widget-send svg {
-        width: 16px;
-        height: 16px;
-        fill: white;
-        pointer-events: none;
-      }
 
       .chat-typing-indicator {
         display: flex;
@@ -712,33 +695,20 @@ class ChatWidget {
     widget.className = 'chat-widget-container';
 
     const micButton = this.config.enableVoice && this.voiceSupported.recognition ? `
-      <button type="button" class="chat-widget-mic" id="chat-widget-mic" title="Sprachaufnahme">
-        <svg viewBox="0 0 24 24">
-          <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-          <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-        </svg>
-      </button>
+      <button type="button" class="chat-widget-mic" id="chat-widget-mic" title="Sprachaufnahme">🎤</button>
     ` : '';
 
     const voiceIndicator = this.config.enableVoice ? '<span class="voice-indicator" id="voice-indicator"></span>' : '';
 
     widget.innerHTML = `
-      <button class="chat-widget-trigger" id="chat-widget-trigger">
-        <svg viewBox="0 0 24 24">
-          <path d="M20 2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h4l4 4 4-4h4c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
-        </svg>
-      </button>
+      <button class="chat-widget-trigger" id="chat-widget-trigger">💬</button>
       <div class="chat-widget-panel" id="chat-widget-panel">
         <div class="chat-widget-header">
           <h3 class="chat-widget-title">
             ${this.config.title}
             ${voiceIndicator}
           </h3>
-          <button class="chat-widget-close" id="chat-widget-close">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-            </svg>
-          </button>
+          <button class="chat-widget-close" id="chat-widget-close">×</button>
         </div>
         <div class="chat-widget-messages"
              id="chat-widget-messages"
@@ -770,11 +740,7 @@ class ChatWidget {
               <button type="submit"
                       class="chat-widget-send"
                       id="chat-widget-send"
-                      aria-label="Nachricht senden">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-                </svg>
-              </button>
+                      aria-label="Nachricht senden">→</button>
             </div>
           </form>
         </div>
@@ -1182,11 +1148,7 @@ class ChatWidget {
     const button = document.createElement('button');
     button.className = 'speak-button';
     button.title = 'Nachricht vorlesen';
-    button.innerHTML = `
-      <svg viewBox="0 0 24 24">
-        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
-      </svg>
-    `;
+    button.innerHTML = '🔊';
 
     button.addEventListener('click', (e) => {
       e.stopPropagation();
