@@ -1312,7 +1312,6 @@ class ChatWidget {
     const messagesContainer = document.getElementById('chat-widget-messages');
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }
-}
 
   cleanup() {
     console.log('Cleaning up chat widget...');
