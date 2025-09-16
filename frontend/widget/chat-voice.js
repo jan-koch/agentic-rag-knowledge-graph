@@ -279,6 +279,7 @@ class ChatWidget {
         width: 24px;
         height: 24px;
         fill: white;
+        pointer-events: none;
       }
 
       .chat-widget-panel {
@@ -446,6 +447,7 @@ class ChatWidget {
         width: 14px;
         height: 14px;
         fill: ${this.config.theme === 'dark' ? '#aaa' : '#666'};
+        pointer-events: none;
       }
 
       .speak-button.speaking svg {
@@ -572,6 +574,7 @@ class ChatWidget {
         width: 18px;
         height: 18px;
         fill: ${this.config.theme === 'dark' ? '#aaa' : '#666'};
+        pointer-events: none;
       }
 
       .chat-widget-mic.recording svg {
@@ -605,6 +608,7 @@ class ChatWidget {
         width: 16px;
         height: 16px;
         fill: white;
+        pointer-events: none;
       }
 
       .chat-typing-indicator {
@@ -657,6 +661,19 @@ class ChatWidget {
         font-size: 12px;
         border: 1px solid #ffeeba;
         margin-bottom: 8px;
+      }
+
+      /* Visually hidden but accessible to screen readers */
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border-width: 0;
       }
     `;
 
@@ -1067,72 +1084,72 @@ class ChatWidget {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-    this.hideTypingIndicator();
+      this.hideTypingIndicator();
 
-    // Create assistant message container
-    const messageContainer = this.addMessage('assistant', '');
-    const contentElement = messageContainer.querySelector('.chat-message-content');
+      // Create assistant message container
+      const messageContainer = this.addMessage('assistant', '');
+      const contentElement = messageContainer.querySelector('.chat-message-content');
 
-    let fullResponse = '';
-    let tools = [];
+      let fullResponse = '';
+      let tools = [];
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
 
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
 
-              switch (data.type) {
-                case 'session':
-                  this.sessionId = data.session_id;
-                  break;
+                switch (data.type) {
+                  case 'session':
+                    this.sessionId = data.session_id;
+                    break;
 
-                case 'text':
-                  fullResponse += data.content;
-                  contentElement.textContent = fullResponse;
-                  this.scrollToBottom();
-                  break;
+                  case 'text':
+                    fullResponse += data.content;
+                    contentElement.textContent = fullResponse;
+                    this.scrollToBottom();
+                    break;
 
-                case 'tools':
-                  tools = data.tools;
-                  break;
+                  case 'tools':
+                    tools = data.tools;
+                    break;
 
-                case 'error':
-                  throw new Error(data.content);
+                  case 'error':
+                    throw new Error(data.content);
 
-                case 'end':
-                  // Auto-speak the response if enabled
-                  if (this.config.autoSpeak && fullResponse) {
-                    this.speak(fullResponse);
-                  }
-                  break;
+                  case 'end':
+                    // Auto-speak the response if enabled
+                    if (this.config.autoSpeak && fullResponse) {
+                      this.speak(fullResponse);
+                    }
+                    break;
+                }
+              } catch (parseError) {
+                console.warn('Failed to parse SSE data:', parseError);
               }
-            } catch (parseError) {
-              console.warn('Failed to parse SSE data:', parseError);
             }
           }
         }
-      }
       } finally {
         reader.releaseLock();
         this.isStreaming = false;
         this.abortController = null;
       }
 
-    // Add speak button for manual playback
-    if (this.voiceSupported.synthesis && fullResponse) {
-      this.addSpeakButton(messageContainer, fullResponse);
-    }
+      // Add speak button for manual playback
+      if (this.voiceSupported.synthesis && fullResponse) {
+        this.addSpeakButton(messageContainer, fullResponse);
+      }
 
       // Add tools info if any were used
       if (tools && tools.length > 0) {
