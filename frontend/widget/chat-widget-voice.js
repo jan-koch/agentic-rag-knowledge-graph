@@ -507,12 +507,12 @@ class ChatWidget {
 
       .chat-widget-input-form {
         display: flex;
+        flex-direction: column;
         gap: 8px;
-        align-items: flex-end;
       }
 
       .chat-widget-input {
-        flex: 1;
+        width: 100%;
         border: 1px solid ${this.config.theme === 'dark' ? '#333' : '#ced4da'};
         border-radius: 20px;
         padding: 12px 16px;
@@ -524,6 +524,7 @@ class ChatWidget {
         max-height: 100px;
         outline: none;
         font-family: inherit;
+        box-sizing: border-box;
       }
 
       .chat-widget-input:focus {
@@ -533,6 +534,8 @@ class ChatWidget {
       .input-buttons {
         display: flex;
         gap: 8px;
+        justify-content: flex-end;
+        align-items: center;
       }
 
       .chat-widget-mic {
