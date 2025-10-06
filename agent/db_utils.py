@@ -368,15 +368,17 @@ async def list_documents(
 # Vector Search Functions
 async def vector_search(
     embedding: List[float],
+    workspace_id: str,
     limit: int = 10
 ) -> List[Dict[str, Any]]:
     """
-    Perform vector similarity search.
-    
+    Perform vector similarity search within a workspace.
+
     Args:
         embedding: Query embedding vector
+        workspace_id: Workspace UUID to search within
         limit: Maximum number of results
-    
+
     Returns:
         List of matching chunks ordered by similarity (best first)
     """
@@ -386,8 +388,9 @@ async def vector_search(
         embedding_str = '[' + ','.join(map(str, embedding)) + ']'
         
         results = await conn.fetch(
-            "SELECT * FROM match_chunks($1::vector, $2)",
+            "SELECT * FROM match_chunks($1::vector, $2::uuid, $3)",
             embedding_str,
+            workspace_id,
             limit
         )
         
@@ -408,18 +411,20 @@ async def vector_search(
 async def hybrid_search(
     embedding: List[float],
     query_text: str,
+    workspace_id: str,
     limit: int = 10,
     text_weight: float = 0.3
 ) -> List[Dict[str, Any]]:
     """
-    Perform hybrid search (vector + keyword).
-    
+    Perform hybrid search (vector + keyword) within a workspace.
+
     Args:
         embedding: Query embedding vector
         query_text: Query text for keyword search
+        workspace_id: Workspace UUID to search within
         limit: Maximum number of results
         text_weight: Weight for text similarity (0-1)
-    
+
     Returns:
         List of matching chunks ordered by combined score (best first)
     """
@@ -427,11 +432,12 @@ async def hybrid_search(
         # Convert embedding to PostgreSQL vector string format
         # PostgreSQL vector format: '[1.0,2.0,3.0]' (no spaces after commas)
         embedding_str = '[' + ','.join(map(str, embedding)) + ']'
-        
+
         results = await conn.fetch(
-            "SELECT * FROM hybrid_search($1::vector, $2, $3, $4)",
+            "SELECT * FROM hybrid_search($1::vector, $2, $3::uuid, $4, $5)",
             embedding_str,
             query_text,
+            workspace_id,
             limit,
             text_weight
         )

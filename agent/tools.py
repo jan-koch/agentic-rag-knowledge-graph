@@ -61,17 +61,20 @@ async def generate_embedding(text: str) -> List[float]:
 class VectorSearchInput(BaseModel):
     """Input for vector search tool."""
     query: str = Field(..., description="Search query")
+    workspace_id: str = Field(..., description="Workspace ID to search within")
     limit: int = Field(default=10, description="Maximum number of results")
 
 
 class GraphSearchInput(BaseModel):
     """Input for graph search tool."""
     query: str = Field(..., description="Search query")
+    workspace_id: str = Field(..., description="Workspace ID for graph search")
 
 
 class HybridSearchInput(BaseModel):
     """Input for hybrid search tool."""
     query: str = Field(..., description="Search query")
+    workspace_id: str = Field(..., description="Workspace ID to search within")
     limit: int = Field(default=10, description="Maximum number of results")
     text_weight: float = Field(default=0.3, description="Weight for text similarity (0-1)")
 
@@ -103,21 +106,22 @@ class EntityTimelineInput(BaseModel):
 # Tool Implementation Functions
 async def vector_search_tool(input_data: VectorSearchInput) -> List[ChunkResult]:
     """
-    Perform vector similarity search.
-    
+    Perform vector similarity search within a workspace.
+
     Args:
-        input_data: Search parameters
-    
+        input_data: Search parameters including workspace_id
+
     Returns:
         List of matching chunks
     """
     try:
         # Generate embedding for the query
         embedding = await generate_embedding(input_data.query)
-        
+
         # Perform vector search
         results = await vector_search(
             embedding=embedding,
+            workspace_id=input_data.workspace_id,
             limit=input_data.limit
         )
 
@@ -142,15 +146,20 @@ async def vector_search_tool(input_data: VectorSearchInput) -> List[ChunkResult]
 
 async def graph_search_tool(input_data: GraphSearchInput) -> List[GraphSearchResult]:
     """
-    Search the knowledge graph.
-    
+    Search the knowledge graph for a workspace.
+
+    Note: Graphiti isolation is handled via group_id during client initialization.
+    Each workspace should have its own GraphitiClient with unique group_id.
+
     Args:
-        input_data: Search parameters
-    
+        input_data: Search parameters including workspace_id
+
     Returns:
         List of graph search results
     """
     try:
+        # TODO: Get workspace-specific Graphiti client
+        # For now, using global client - will be updated when we add workspace-aware client management
         results = await search_knowledge_graph(
             query=input_data.query
         )
@@ -174,22 +183,23 @@ async def graph_search_tool(input_data: GraphSearchInput) -> List[GraphSearchRes
 
 async def hybrid_search_tool(input_data: HybridSearchInput) -> List[ChunkResult]:
     """
-    Perform hybrid search (vector + keyword).
-    
+    Perform hybrid search (vector + keyword) within a workspace.
+
     Args:
-        input_data: Search parameters
-    
+        input_data: Search parameters including workspace_id
+
     Returns:
         List of matching chunks
     """
     try:
         # Generate embedding for the query
         embedding = await generate_embedding(input_data.query)
-        
+
         # Perform hybrid search
         results = await hybrid_search(
             embedding=embedding,
             query_text=input_data.query,
+            workspace_id=input_data.workspace_id,
             limit=input_data.limit,
             text_weight=input_data.text_weight
         )
