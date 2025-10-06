@@ -64,7 +64,7 @@ def generate_api_key() -> tuple[str, str, str]:
     """
     # Generate random key
     random_bytes = secrets.token_bytes(32)
-    full_key = f"sk_live_{secrets.token_urlsafe(32)}"
+    full_key = f"apikey_live_{secrets.token_urlsafe(32)}"
 
     # Create prefix (first 15 chars for lookup)
     key_prefix = full_key[:15]
