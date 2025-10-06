@@ -83,8 +83,8 @@ class GraphitiClient:
                 base_url=self.llm_base_url
             )
             
-            # Create OpenAI LLM client
-            llm_client = OpenAIClient(config=llm_config)
+            # Create OpenAI LLM client (disable reasoning for non-o1 models, set supported verbosity)
+            llm_client = OpenAIClient(config=llm_config, reasoning=None, verbosity="medium")
             
             # Create OpenAI embedder
             embedder = OpenAIEmbedder(
@@ -329,8 +329,8 @@ class GraphitiClient:
                 base_url=self.llm_base_url
             )
             
-            llm_client = OpenAIClient(config=llm_config)
-            
+            llm_client = OpenAIClient(config=llm_config, reasoning=None, verbosity="medium")
+
             embedder = OpenAIEmbedder(
                 config=OpenAIEmbedderConfig(
                     api_key=self.embedding_api_key,

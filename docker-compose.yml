@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_HOST_AUTH_METHOD: trust
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -30,8 +30,8 @@ services:
       NEO4J_dbms_security_procedures_unrestricted: "apoc.*"
       NEO4J_dbms_security_procedures_allowlist: "apoc.*"
     ports:
-      - "7474:7474"  # HTTP
-      - "7687:7687"  # Bolt
+      - "127.0.0.1:7474:7474"  # HTTP
+      - "127.0.0.1:7687:7687"  # Bolt
     volumes:
       - neo4j_data:/data
       - neo4j_logs:/logs
@@ -64,7 +64,7 @@ services:
     container_name: agentic-rag-open-webui
     image: ghcr.io/open-webui/open-webui:main
     ports:
-      - "3000:8080"
+      - "127.0.0.1:3000:8080"
     environment:
       # Open WebUI Configuration
       - OLLAMA_BASE_URL=disabled
