@@ -161,6 +161,11 @@ async def add_security_headers(request: Request, call_next):
     return await security_headers_middleware(request, call_next)
 
 
+# Include multi-tenant API router
+from .api_multi_tenant import router as multi_tenant_router
+app.include_router(multi_tenant_router)
+
+
 # Helper functions for agent execution
 async def get_or_create_session(request: ChatRequest) -> str:
     """Get existing session or create new one."""
