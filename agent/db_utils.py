@@ -500,7 +500,7 @@ async def execute_query(query: str, *params) -> List[Dict[str, Any]]:
 async def test_connection() -> bool:
     """
     Test database connection.
-    
+
     Returns:
         True if connection successful
     """
@@ -511,3 +511,403 @@ async def test_connection() -> bool:
     except Exception as e:
         logger.error(f"Database connection test failed: {e}")
         return False
+
+
+# ====================
+# Multi-Tenancy Functions
+# ====================
+
+# Organization Functions
+async def create_organization(
+    name: str,
+    slug: str,
+    plan_tier: str = "free",
+    contact_email: str = "",
+    contact_name: Optional[str] = None,
+    max_workspaces: int = 1,
+    max_documents_per_workspace: int = 100,
+    max_monthly_requests: int = 10000
+) -> str:
+    """
+    Create a new organization.
+
+    Returns:
+        Organization ID
+    """
+    async with db_pool.acquire() as conn:
+        result = await conn.fetchrow(
+            """
+            INSERT INTO organizations (
+                name, slug, plan_tier, contact_email, contact_name,
+                max_workspaces, max_documents_per_workspace, max_monthly_requests
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING id::text
+            """,
+            name, slug, plan_tier, contact_email, contact_name,
+            max_workspaces, max_documents_per_workspace, max_monthly_requests
+        )
+        return result["id"]
+
+
+async def get_organization(org_id: str) -> Optional[Dict[str, Any]]:
+    """Get organization by ID."""
+    async with db_pool.acquire() as conn:
+        result = await conn.fetchrow(
+            """
+            SELECT
+                id::text,
+                name,
+                slug,
+                plan_tier,
+                max_workspaces,
+                max_documents_per_workspace,
+                max_monthly_requests,
+                contact_email,
+                contact_name,
+                settings,
+                created_at,
+                updated_at
+            FROM organizations
+            WHERE id = $1::uuid
+            """,
+            org_id
+        )
+
+        if result:
+            return dict(result)
+        return None
+
+
+# Workspace Functions
+async def create_workspace(
+    organization_id: str,
+    name: str,
+    slug: str,
+    description: Optional[str] = None,
+    settings: Optional[Dict[str, Any]] = None
+) -> str:
+    """
+    Create a new workspace.
+
+    Returns:
+        Workspace ID
+    """
+    async with db_pool.acquire() as conn:
+        result = await conn.fetchrow(
+            """
+            INSERT INTO workspaces (organization_id, name, slug, description, settings)
+            VALUES ($1::uuid, $2, $3, $4, $5)
+            RETURNING id::text
+            """,
+            organization_id, name, slug, description, json.dumps(settings or {})
+        )
+        return result["id"]
+
+
+async def get_workspace(workspace_id: str) -> Optional[Dict[str, Any]]:
+    """Get workspace by ID."""
+    async with db_pool.acquire() as conn:
+        result = await conn.fetchrow(
+            """
+            SELECT
+                id::text,
+                organization_id::text,
+                name,
+                slug,
+                description,
+                settings,
+                document_count,
+                monthly_requests,
+                last_request_reset_at,
+                created_at,
+                updated_at
+            FROM workspaces
+            WHERE id = $1::uuid
+            """,
+            workspace_id
+        )
+
+        if result:
+            data = dict(result)
+            data["settings"] = json.loads(data.get("settings", "{}"))
+            return data
+        return None
+
+
+async def list_workspaces(organization_id: str) -> List[Dict[str, Any]]:
+    """List all workspaces for an organization."""
+    async with db_pool.acquire() as conn:
+        results = await conn.fetch(
+            """
+            SELECT
+                id::text,
+                organization_id::text,
+                name,
+                slug,
+                description,
+                document_count,
+                monthly_requests,
+                created_at
+            FROM workspaces
+            WHERE organization_id = $1::uuid
+            ORDER BY created_at DESC
+            """,
+            organization_id
+        )
+        return [dict(row) for row in results]
+
+
+async def increment_workspace_requests(workspace_id: str):
+    """Increment monthly request counter for workspace."""
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            """
+            UPDATE workspaces
+            SET monthly_requests = monthly_requests + 1
+            WHERE id = $1::uuid
+            """,
+            workspace_id
+        )
+
+
+# Agent Functions
+async def create_agent(
+    workspace_id: str,
+    name: str,
+    slug: str,
+    system_prompt: str,
+    description: Optional[str] = None,
+    model_provider: str = "openai",
+    model_name: str = "gpt-4",
+    temperature: float = 0.7,
+    max_tokens: Optional[int] = None,
+    enabled_tools: Optional[List[str]] = None,
+    tool_config: Optional[Dict[str, Any]] = None
+) -> str:
+    """
+    Create a new agent.
+
+    Returns:
+        Agent ID
+    """
+    async with db_pool.acquire() as conn:
+        result = await conn.fetchrow(
+            """
+            INSERT INTO agents (
+                workspace_id, name, slug, description, system_prompt,
+                model_provider, model_name, temperature, max_tokens,
+                enabled_tools, tool_config
+            )
+            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            RETURNING id::text
+            """,
+            workspace_id, name, slug, description, system_prompt,
+            model_provider, model_name, temperature, max_tokens,
+            json.dumps(enabled_tools or []),
+            json.dumps(tool_config or {})
+        )
+        return result["id"]
+
+
+async def get_agent(agent_id: str) -> Optional[Dict[str, Any]]:
+    """Get agent by ID."""
+    async with db_pool.acquire() as conn:
+        result = await conn.fetchrow(
+            """
+            SELECT
+                id::text,
+                workspace_id::text,
+                name,
+                slug,
+                description,
+                system_prompt,
+                model_provider,
+                model_name,
+                temperature,
+                max_tokens,
+                enabled_tools,
+                tool_config,
+                is_active,
+                settings,
+                created_at,
+                updated_at
+            FROM agents
+            WHERE id = $1::uuid
+            """,
+            agent_id
+        )
+
+        if result:
+            data = dict(result)
+            data["enabled_tools"] = json.loads(data.get("enabled_tools", "[]"))
+            data["tool_config"] = json.loads(data.get("tool_config", "{}"))
+            data["settings"] = json.loads(data.get("settings", "{}"))
+            return data
+        return None
+
+
+async def list_agents(workspace_id: str, include_inactive: bool = False) -> List[Dict[str, Any]]:
+    """List all agents for a workspace."""
+    async with db_pool.acquire() as conn:
+        query = """
+            SELECT
+                id::text,
+                workspace_id::text,
+                name,
+                slug,
+                description,
+                model_provider,
+                model_name,
+                is_active,
+                created_at
+            FROM agents
+            WHERE workspace_id = $1::uuid
+        """
+
+        if not include_inactive:
+            query += " AND is_active = true"
+
+        query += " ORDER BY created_at DESC"
+
+        results = await conn.fetch(query, workspace_id)
+        return [dict(row) for row in results]
+
+
+async def update_agent(
+    agent_id: str,
+    updates: Dict[str, Any]
+) -> bool:
+    """Update agent fields."""
+    if not updates:
+        return False
+
+    # Build dynamic update query
+    set_clauses = []
+    params = []
+    param_idx = 1
+
+    for field, value in updates.items():
+        if field in ["enabled_tools", "tool_config", "settings"]:
+            set_clauses.append(f"{field} = ${param_idx}::jsonb")
+            params.append(json.dumps(value))
+        else:
+            set_clauses.append(f"{field} = ${param_idx}")
+            params.append(value)
+        param_idx += 1
+
+    params.append(agent_id)
+
+    async with db_pool.acquire() as conn:
+        result = await conn.execute(
+            f"""
+            UPDATE agents
+            SET {', '.join(set_clauses)}
+            WHERE id = ${param_idx}::uuid
+            """,
+            *params
+        )
+        return result != "UPDATE 0"
+
+
+async def delete_agent(agent_id: str) -> bool:
+    """Delete an agent."""
+    async with db_pool.acquire() as conn:
+        result = await conn.execute(
+            "DELETE FROM agents WHERE id = $1::uuid",
+            agent_id
+        )
+        return result != "DELETE 0"
+
+
+# API Key Functions
+async def create_api_key(
+    workspace_id: str,
+    name: str,
+    key_prefix: str,
+    key_hash: str,
+    scopes: List[str],
+    rate_limit_per_minute: int = 60,
+    expires_at: Optional[datetime] = None
+) -> str:
+    """
+    Create a new API key.
+
+    Returns:
+        API key ID
+    """
+    async with db_pool.acquire() as conn:
+        result = await conn.fetchrow(
+            """
+            INSERT INTO api_keys (
+                workspace_id, name, key_prefix, key_hash,
+                scopes, rate_limit_per_minute, expires_at
+            )
+            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7)
+            RETURNING id::text
+            """,
+            workspace_id, name, key_prefix, key_hash,
+            json.dumps(scopes), rate_limit_per_minute, expires_at
+        )
+        return result["id"]
+
+
+async def get_api_key_by_prefix(key_prefix: str) -> Optional[Dict[str, Any]]:
+    """Get API key by prefix."""
+    async with db_pool.acquire() as conn:
+        result = await conn.fetchrow(
+            """
+            SELECT
+                id::text,
+                workspace_id::text,
+                name,
+                key_prefix,
+                key_hash,
+                scopes,
+                rate_limit_per_minute,
+                is_active,
+                last_used_at,
+                expires_at,
+                created_at,
+                revoked_at
+            FROM api_keys
+            WHERE key_prefix = $1
+              AND is_active = true
+              AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+              AND revoked_at IS NULL
+            """,
+            key_prefix
+        )
+
+        if result:
+            data = dict(result)
+            data["scopes"] = json.loads(data.get("scopes", "[]"))
+            return data
+        return None
+
+
+async def update_api_key_last_used(api_key_id: str):
+    """Update API key last used timestamp."""
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            """
+            UPDATE api_keys
+            SET last_used_at = CURRENT_TIMESTAMP
+            WHERE id = $1::uuid
+            """,
+            api_key_id
+        )
+
+
+async def revoke_api_key(api_key_id: str) -> bool:
+    """Revoke an API key."""
+    async with db_pool.acquire() as conn:
+        result = await conn.execute(
+            """
+            UPDATE api_keys
+            SET is_active = false, revoked_at = CURRENT_TIMESTAMP
+            WHERE id = $1::uuid
+            """,
+            api_key_id
+        )
+        return result != "UPDATE 0"

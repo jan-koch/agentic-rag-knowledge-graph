@@ -185,10 +185,152 @@ class StreamDelta(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
+# Multi-Tenancy Models
+class Organization(BaseModel):
+    """Organization model (billing entity)."""
+    id: UUID
+    name: str
+    slug: str
+    plan_tier: Literal["free", "starter", "pro", "enterprise"] = "free"
+    max_workspaces: int = 1
+    max_documents_per_workspace: int = 100
+    max_monthly_requests: int = 10000
+    contact_email: str
+    contact_name: Optional[str] = None
+    settings: Dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime
+
+
+class Workspace(BaseModel):
+    """Workspace model (isolated knowledge base)."""
+    id: UUID
+    organization_id: UUID
+    name: str
+    slug: str
+    description: Optional[str] = None
+    settings: Dict[str, Any] = Field(default_factory=dict)
+    document_count: int = 0
+    monthly_requests: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class Agent(BaseModel):
+    """Agent model (behavior configuration)."""
+    id: UUID
+    workspace_id: UUID
+    name: str
+    slug: str
+    description: Optional[str] = None
+    system_prompt: str
+    model_provider: str = "openai"
+    model_name: str = "gpt-4"
+    temperature: float = 0.7
+    max_tokens: Optional[int] = None
+    enabled_tools: List[str] = Field(default_factory=list)
+    tool_config: Dict[str, Any] = Field(default_factory=dict)
+    is_active: bool = True
+    settings: Dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime
+
+
+class APIKey(BaseModel):
+    """API Key model (workspace-scoped)."""
+    id: UUID
+    workspace_id: UUID
+    name: str
+    key_prefix: str  # For display: "sk_live_abc123..."
+    scopes: List[str] = Field(default_factory=list)
+    rate_limit_per_minute: int = 60
+    is_active: bool = True
+    last_used_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+    created_at: datetime
+    revoked_at: Optional[datetime] = None
+
+
+# Request/Response Models for Multi-Tenancy
+class CreateOrganizationRequest(BaseModel):
+    """Request to create an organization."""
+    name: str
+    slug: str
+    plan_tier: Literal["free", "starter", "pro", "enterprise"] = "free"
+    contact_email: str
+    contact_name: Optional[str] = None
+
+
+class CreateWorkspaceRequest(BaseModel):
+    """Request to create a workspace."""
+    name: str
+    slug: str
+    description: Optional[str] = None
+    settings: Dict[str, Any] = Field(default_factory=dict)
+
+
+class CreateAgentRequest(BaseModel):
+    """Request to create an agent."""
+    name: str
+    slug: str
+    description: Optional[str] = None
+    system_prompt: str
+    model_provider: str = "openai"
+    model_name: str = "gpt-4"
+    temperature: float = Field(default=0.7, ge=0, le=2)
+    max_tokens: Optional[int] = None
+    enabled_tools: List[str] = Field(default_factory=list)
+    tool_config: Dict[str, Any] = Field(default_factory=dict)
+
+
+class UpdateAgentRequest(BaseModel):
+    """Request to update an agent."""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    system_prompt: Optional[str] = None
+    model_provider: Optional[str] = None
+    model_name: Optional[str] = None
+    temperature: Optional[float] = Field(None, ge=0, le=2)
+    max_tokens: Optional[int] = None
+    enabled_tools: Optional[List[str]] = None
+    tool_config: Optional[Dict[str, Any]] = None
+    is_active: Optional[bool] = None
+
+
+class CreateAPIKeyRequest(BaseModel):
+    """Request to create an API key."""
+    name: str
+    scopes: List[str] = Field(default=["chat", "search"])
+    rate_limit_per_minute: int = Field(default=60, ge=1, le=1000)
+    expires_at: Optional[datetime] = None
+
+
+class CreateAPIKeyResponse(BaseModel):
+    """Response with new API key (only time full key is returned)."""
+    id: UUID
+    name: str
+    key: str  # Full key, only shown once
+    key_prefix: str
+    workspace_id: UUID
+    created_at: datetime
+
+
+# Updated Chat Request for multi-tenancy
+class MultiTenantChatRequest(BaseModel):
+    """Multi-tenant chat request model."""
+    agent_id: UUID = Field(..., description="Agent to chat with")
+    query: str = Field(..., description="User message", min_length=1)
+    session_id: Optional[UUID] = Field(None, description="Session ID for conversation continuity")
+    user_id: Optional[str] = Field(None, description="User identifier")
+    stream: bool = Field(default=False, description="Whether to stream response")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+
+
 # Database Models
 class Document(BaseModel):
     """Document model."""
     id: Optional[str] = None
+    workspace_id: Optional[UUID] = None
     title: str
     source: str
     content: str
