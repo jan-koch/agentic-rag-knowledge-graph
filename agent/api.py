@@ -12,7 +12,7 @@ from datetime import datetime
 import uuid
 
 from fastapi import FastAPI, HTTPException, Request, Depends
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 import uvicorn
@@ -1096,6 +1096,27 @@ async def global_exception_handler(request: Request, exc: Exception):
         error_type=type(exc).__name__,
         request_id=str(uuid.uuid4())
     )
+
+
+# ====================
+# Chat Widget Endpoint
+# ====================
+
+@app.get("/widget/chat")
+async def get_chat_widget():
+    """
+    Serve the embeddable chat widget HTML.
+
+    Usage: Embed in your app using an iframe:
+    <iframe
+        src="http://your-api-url/widget/chat?workspace_id=xxx&agent_id=yyy&agent_name=Support"
+        width="100%"
+        height="600px"
+        frameborder="0">
+    </iframe>
+    """
+    widget_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "chat-widget.html")
+    return FileResponse(widget_path, media_type="text/html")
 
 
 # Development server
