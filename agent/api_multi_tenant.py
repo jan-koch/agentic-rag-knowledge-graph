@@ -395,6 +395,155 @@ async def revoke_api_key_endpoint(
 
 
 # ====================
+# Document Management Endpoints
+# ====================
+
+@router.get("/workspaces/{workspace_id}/documents")
+async def list_documents_endpoint(
+    workspace_id: str,
+    limit: int = 100,
+    offset: int = 0
+):
+    """List all documents in a workspace."""
+    # Verify workspace exists
+    workspace = await get_workspace(workspace_id)
+    if not workspace:
+        raise HTTPException(404, "Workspace not found")
+
+    from .db_utils import db_pool
+
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT
+                id::text,
+                title,
+                source,
+                metadata,
+                created_at,
+                updated_at
+            FROM documents
+            WHERE workspace_id = $1::uuid
+            ORDER BY created_at DESC
+            LIMIT $2 OFFSET $3
+            """,
+            workspace_id,
+            limit,
+            offset
+        )
+
+        documents = [dict(row) for row in rows]
+
+        # Get total count
+        total = await conn.fetchval(
+            "SELECT COUNT(*) FROM documents WHERE workspace_id = $1::uuid",
+            workspace_id
+        )
+
+        return {
+            "documents": documents,
+            "total": total,
+            "limit": limit,
+            "offset": offset
+        }
+
+
+@router.get("/workspaces/{workspace_id}/documents/{document_id}")
+async def get_document_endpoint(
+    workspace_id: str,
+    document_id: str
+):
+    """Get a specific document by ID."""
+    # Verify workspace exists
+    workspace = await get_workspace(workspace_id)
+    if not workspace:
+        raise HTTPException(404, "Workspace not found")
+
+    from .db_utils import db_pool
+
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT
+                id::text,
+                title,
+                source,
+                content,
+                metadata,
+                created_at,
+                updated_at
+            FROM documents
+            WHERE id = $1::uuid AND workspace_id = $2::uuid
+            """,
+            document_id,
+            workspace_id
+        )
+
+        if not row:
+            raise HTTPException(404, "Document not found")
+
+        return dict(row)
+
+
+@router.delete("/workspaces/{workspace_id}/documents/{document_id}")
+async def delete_document_endpoint(
+    workspace_id: str,
+    document_id: str
+):
+    """
+    Delete a document and all its associated chunks.
+
+    This will also automatically update the workspace document count via trigger.
+    """
+    # Verify workspace exists
+    workspace = await get_workspace(workspace_id)
+    if not workspace:
+        raise HTTPException(404, "Workspace not found")
+
+    from .db_utils import db_pool
+
+    async with db_pool.acquire() as conn:
+        # Verify document exists and belongs to workspace
+        doc = await conn.fetchrow(
+            "SELECT id FROM documents WHERE id = $1::uuid AND workspace_id = $2::uuid",
+            document_id,
+            workspace_id
+        )
+
+        if not doc:
+            raise HTTPException(404, "Document not found in this workspace")
+
+        # Count chunks before deletion
+        chunks_count = await conn.fetchval(
+            "SELECT COUNT(*) FROM chunks WHERE document_id = $1::uuid",
+            document_id
+        )
+
+        # Delete chunks first (foreign key constraint)
+        await conn.execute(
+            "DELETE FROM chunks WHERE document_id = $1::uuid",
+            document_id
+        )
+
+        # Delete document (trigger will update workspace document_count)
+        await conn.execute(
+            "DELETE FROM documents WHERE id = $1::uuid",
+            document_id
+        )
+
+        chunks_deleted = chunks_count
+
+        logger.info(f"Deleted document {document_id} and {chunks_deleted} chunks from workspace {workspace_id}")
+
+        return {
+            "status": "success",
+            "message": "Document deleted",
+            "document_id": document_id,
+            "chunks_deleted": chunks_deleted or 0
+        }
+
+
+# ====================
 # Multi-Tenant Chat Endpoint
 # ====================
 

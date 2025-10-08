@@ -29,9 +29,11 @@ class ChatRequest(BaseModel):
     message: str = Field(..., description="User message")
     session_id: Optional[str] = Field(None, description="Session ID for conversation continuity")
     user_id: Optional[str] = Field(None, description="User identifier")
+    workspace_id: Optional[str] = Field(None, description="Workspace ID for multi-tenant support")
+    agent_id: Optional[str] = Field(None, description="Agent ID for workspace-specific agents")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
     search_type: SearchType = Field(default=SearchType.HYBRID, description="Type of search to perform")
-    
+
     model_config = ConfigDict(use_enum_values=True)
 
 
@@ -385,10 +387,11 @@ class Message(BaseModel):
 class AgentDependencies(BaseModel):
     """Dependencies for the agent."""
     session_id: str
+    workspace_id: Optional[str] = None
     database_url: Optional[str] = None
     neo4j_uri: Optional[str] = None
     openai_api_key: Optional[str] = None
-    
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 

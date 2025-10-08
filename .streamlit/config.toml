@@ -1,5 +1,5 @@
 [server]
-port = 8501
+port = 8012
 address = "127.0.0.1"
 headless = true
 enableCORS = false
@@ -8,7 +8,7 @@ enableXsrfProtection = true
 [browser]
 gatherUsageStats = false
 serverAddress = "localhost"
-serverPort = 8501
+serverPort = 8012
 
 [theme]
 primaryColor = "#FF4B4B"

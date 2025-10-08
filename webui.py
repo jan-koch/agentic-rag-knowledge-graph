@@ -835,8 +835,6 @@ elif page == "💬 Chat":
 
     # Main chat interface
     if st.session_state.selected_workspace and st.session_state.selected_agent:
-        st.markdown("### Chat Interface")
-
         # Display chat messages
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
@@ -869,12 +867,20 @@ elif page == "💬 Chat":
                         "agent_id": st.session_state.selected_agent
                     }
 
-                    # Try the multi-tenant endpoint first, fallback to regular chat
-                    result = api_request("POST", "/chat", chat_data)
+                    # Chat endpoint is at root level, not under /v1
+                    chat_url = "http://localhost:8058/chat"
+                    try:
+                        response = requests.post(chat_url, json=chat_data)
+                        if response.status_code == 200:
+                            result = {"success": True, "data": response.json()}
+                        else:
+                            result = {"success": False, "error": response.json().get("detail", response.text)}
+                    except Exception as e:
+                        result = {"success": False, "error": str(e)}
 
                     if result.get("success"):
                         response_data = result["data"]
-                        response_text = response_data.get("response", "No response")
+                        response_text = response_data.get("message", "No response")
 
                         st.markdown(response_text)
 

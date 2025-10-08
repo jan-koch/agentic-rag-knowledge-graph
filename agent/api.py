@@ -173,10 +173,11 @@ async def get_or_create_session(request: ChatRequest) -> str:
         session = await get_session(request.session_id)
         if session:
             return request.session_id
-    
-    # Create new session
+
+    # Create new session with workspace_id if provided
     return await create_session(
         user_id=request.user_id,
+        workspace_id=request.workspace_id,
         metadata=request.metadata
     )
 
@@ -317,25 +318,36 @@ async def execute_agent(
     message: str,
     session_id: str,
     user_id: Optional[str] = None,
+    workspace_id: Optional[str] = None,
     save_conversation: bool = True
 ) -> tuple[str, List[ToolCall]]:
     """
     Execute the agent with a message.
-    
+
     Args:
         message: User message
         session_id: Session ID
         user_id: Optional user ID
+        workspace_id: Optional workspace ID
         save_conversation: Whether to save the conversation
-    
+
     Returns:
         Tuple of (agent response, tools used)
     """
     try:
+        # Get workspace_id from session if not provided
+        if not workspace_id:
+            from .db_utils import db_pool
+            async with db_pool.acquire() as conn:
+                workspace_id = await conn.fetchval(
+                    "SELECT workspace_id::text FROM sessions WHERE id = $1::uuid",
+                    session_id
+                )
+
         # Create dependencies
         deps = AgentDependencies(
             session_id=session_id,
-            user_id=user_id
+            workspace_id=workspace_id
         )
         
         # Get conversation context
@@ -427,7 +439,8 @@ async def chat(request: ChatRequest, api_key: str = Depends(verify_api_key)):
         response, tools_used = await execute_agent(
             message=request.message,
             session_id=session_id,
-            user_id=request.user_id
+            user_id=request.user_id,
+            workspace_id=request.workspace_id
         )
         
         return ChatResponse(

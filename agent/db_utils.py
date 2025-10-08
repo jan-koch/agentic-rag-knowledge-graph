@@ -83,34 +83,37 @@ async def close_database():
 # Session Management Functions
 async def create_session(
     user_id: Optional[str] = None,
+    workspace_id: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None,
     timeout_minutes: int = 60
 ) -> str:
     """
     Create a new session.
-    
+
     Args:
         user_id: Optional user identifier
+        workspace_id: Optional workspace ID for multi-tenant support
         metadata: Optional session metadata
         timeout_minutes: Session timeout in minutes
-    
+
     Returns:
         Session ID
     """
     async with db_pool.acquire() as conn:
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=timeout_minutes)
-        
+
         result = await conn.fetchrow(
             """
-            INSERT INTO sessions (user_id, metadata, expires_at)
-            VALUES ($1, $2, $3)
+            INSERT INTO sessions (user_id, workspace_id, metadata, expires_at)
+            VALUES ($1, $2::uuid, $3, $4)
             RETURNING id::text
             """,
             user_id,
+            workspace_id,
             json.dumps(metadata or {}),
             expires_at
         )
-        
+
         return result["id"]
 
 
@@ -189,29 +192,36 @@ async def add_message(
 ) -> str:
     """
     Add a message to a session.
-    
+
     Args:
         session_id: Session UUID
         role: Message role (user/assistant/system)
         content: Message content
         metadata: Optional message metadata
-    
+
     Returns:
         Message ID
     """
     async with db_pool.acquire() as conn:
+        # Get workspace_id from session
+        workspace_id = await conn.fetchval(
+            "SELECT workspace_id FROM sessions WHERE id = $1::uuid",
+            session_id
+        )
+
         result = await conn.fetchrow(
             """
-            INSERT INTO messages (session_id, role, content, metadata)
-            VALUES ($1::uuid, $2, $3, $4)
+            INSERT INTO messages (session_id, workspace_id, role, content, metadata)
+            VALUES ($1::uuid, $2::uuid, $3, $4, $5)
             RETURNING id::text
             """,
             session_id,
+            workspace_id,
             role,
             content,
             json.dumps(metadata or {})
         )
-        
+
         return result["id"]
 
 
