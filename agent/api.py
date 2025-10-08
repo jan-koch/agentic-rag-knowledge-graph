@@ -143,15 +143,13 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure CORS based on environment
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",") if os.getenv("ALLOWED_ORIGINS") != "*" else ["*"]
-
+# Configure CORS - allow all origins since API key provides security
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-N8N-Signature", "User-Agent"]
+    allow_origins=["*"],
+    allow_credentials=False,  # Must be False when allow_origins is ["*"]
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"]  # Allow all headers including Authorization
 )
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
