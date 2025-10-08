@@ -272,30 +272,38 @@ async def verify_n8n_api_key(credentials: Optional[HTTPAuthorizationCredentials]
 def security_headers_middleware(request: Request, call_next):
     """
     Add security headers to responses.
-    
+
     Args:
         request: FastAPI request object
         call_next: Next middleware function
-        
+
     Returns:
         Response with security headers
     """
     async def _middleware():
         response = await call_next(request)
-        
+
         # Security headers
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'none'; object-src 'none';"
-        
+
+        # Allow iframe embedding for widget endpoints, deny for everything else
+        if request.url.path.startswith("/widget/"):
+            # Allow widget chat to be embedded in any iframe (needed for chat widget)
+            response.headers["X-Frame-Options"] = "ALLOWALL"
+            response.headers["Content-Security-Policy"] = "default-src 'self' 'unsafe-inline' 'unsafe-eval'; frame-ancestors *;"
+        else:
+            # Deny iframe embedding for all other endpoints
+            response.headers["X-Frame-Options"] = "DENY"
+            response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'none'; object-src 'none';"
+
         # Only add HSTS in production with HTTPS
         if request.url.scheme == "https":
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        
+
         return response
-    
+
     return _middleware()
 
 
