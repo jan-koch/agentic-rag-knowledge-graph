@@ -16,13 +16,36 @@
     const config = window.IHNEN_CHAT_CONFIG || {};
 
     if (!config.apiKey) {
-        console.error('Ihnen Chat Widget: API key is required. Set window.IHNEN_CHAT_CONFIG.apiKey');
+        console.error('Ihnen Chat Widget: ' + (config.language === 'en' ? 'API key is required. Set window.IHNEN_CHAT_CONFIG.apiKey' : 'API-Schlüssel erforderlich. Setzen Sie window.IHNEN_CHAT_CONFIG.apiKey'));
         return;
     }
 
     const apiUrl = config.apiUrl || 'https://botapi.kobra-dataworks.de';
     const primaryColor = config.primaryColor || '#667eea';
     const position = config.position || 'bottom-right';
+    const language = config.language || 'de'; // 'en' or 'de'
+
+    // Translations
+    const translations = {
+        en: {
+            error_prefix: 'Chat Widget Error: ',
+            api_key_required: 'API key is required. Set window.IHNEN_CHAT_CONFIG.apiKey',
+            invalid_api_key: 'Invalid API key',
+            subscription_inactive: 'Subscription is not active',
+            validation_failed: 'Validation failed: ',
+            not_validated: 'Widget not validated. Please check API key.'
+        },
+        de: {
+            error_prefix: 'Chat-Widget Fehler: ',
+            api_key_required: 'API-Schlüssel erforderlich. Setzen Sie window.IHNEN_CHAT_CONFIG.apiKey',
+            invalid_api_key: 'Ungültiger API-Schlüssel',
+            subscription_inactive: 'Abonnement ist nicht aktiv',
+            validation_failed: 'Validierung fehlgeschlagen: ',
+            not_validated: 'Widget nicht validiert. Bitte überprüfen Sie den API-Schlüssel.'
+        }
+    };
+
+    const t = translations[language];
 
     // Check if widget is already initialized
     if (window.IhnenChatWidget) return;
@@ -45,14 +68,14 @@
 
             if (!response.ok) {
                 const error = await response.json();
-                throw new Error(error.detail || 'Invalid API key');
+                throw new Error(error.detail || t.invalid_api_key);
             }
 
             const data = await response.json();
 
             // Check subscription status
             if (!data.subscription_active) {
-                throw new Error('Subscription is not active');
+                throw new Error(t.subscription_inactive);
             }
 
             workspaceId = data.workspace_id;
@@ -84,7 +107,7 @@
             z-index: 999999;
             box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         `;
-        errorDiv.textContent = `Chat Widget Error: ${message}`;
+        errorDiv.textContent = `${t.error_prefix}${message}`;
         document.body.appendChild(errorDiv);
 
         setTimeout(() => errorDiv.remove(), 5000);
@@ -172,7 +195,7 @@
     // Load chat iframe
     function loadChat() {
         if (!isValidated) {
-            showError('Widget not validated. Please check API key.');
+            showError(t.not_validated);
             return;
         }
 
