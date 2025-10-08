@@ -1127,7 +1127,12 @@ async def get_chat_widget_js():
     <script src="https://botapi.kobra-dataworks.de/static/chat-widget.js"></script>
     """
     js_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "chat-widget.js")
-    return FileResponse(js_path, media_type="application/javascript")
+    response = FileResponse(js_path, media_type="application/javascript")
+    # Prevent caching to ensure users always get latest version
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 
 @app.get("/static/chat-widget-secure.js")
@@ -1142,7 +1147,12 @@ async def get_chat_widget_secure_js():
     <script src="https://botapi.kobra-dataworks.de/static/chat-widget-secure.js"></script>
     """
     js_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "chat-widget-secure.js")
-    return FileResponse(js_path, media_type="application/javascript")
+    response = FileResponse(js_path, media_type="application/javascript")
+    # Prevent caching to ensure users always get latest version
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 
 @app.post("/v1/widget/validate")
