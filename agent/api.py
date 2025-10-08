@@ -1119,6 +1119,120 @@ async def get_chat_widget():
     return FileResponse(widget_path, media_type="text/html")
 
 
+@app.get("/static/chat-widget.js")
+async def get_chat_widget_js():
+    """
+    Serve the chat widget JavaScript file.
+
+    Usage: Add this script tag to any HTML page:
+    <script src="https://botapi.kobra-dataworks.de/static/chat-widget.js"></script>
+    """
+    js_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "chat-widget.js")
+    return FileResponse(js_path, media_type="application/javascript")
+
+
+@app.get("/static/chat-widget-secure.js")
+async def get_chat_widget_secure_js():
+    """
+    Serve the secure chat widget JavaScript file with API key authentication.
+
+    Usage:
+    <script>
+      window.IHNEN_CHAT_CONFIG = { apiKey: 'your-api-key' };
+    </script>
+    <script src="https://botapi.kobra-dataworks.de/static/chat-widget-secure.js"></script>
+    """
+    js_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "chat-widget-secure.js")
+    return FileResponse(js_path, media_type="application/javascript")
+
+
+@app.post("/v1/widget/validate")
+async def validate_widget_api_key(request: Request):
+    """
+    Validate API key and return workspace/agent configuration.
+
+    Returns workspace_id, agent_id, agent_name, and subscription status.
+    """
+    try:
+        # Get API key from Authorization header
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(401, "Missing or invalid Authorization header")
+
+        api_key = auth_header.replace("Bearer ", "")
+
+        # Get API key info from database
+        from .db_utils import db_pool
+
+        async with db_pool.acquire() as conn:
+            # Get API key details
+            key_row = await conn.fetchrow(
+                """
+                SELECT ak.*, w.organization_id
+                FROM api_keys ak
+                JOIN workspaces w ON ak.workspace_id = w.id
+                WHERE ak.key_hash = $1 AND ak.is_active = true
+                  AND (ak.expires_at IS NULL OR ak.expires_at > NOW())
+                """,
+                hashlib.sha256(api_key.encode()).hexdigest()
+            )
+
+            if not key_row:
+                raise HTTPException(401, "Invalid or expired API key")
+
+            workspace_id = str(key_row["workspace_id"])
+            org_id = str(key_row["organization_id"])
+
+            # Get organization to check subscription
+            org_row = await conn.fetchrow(
+                "SELECT plan_tier FROM organizations WHERE id = $1::uuid",
+                org_id
+            )
+
+            if not org_row:
+                raise HTTPException(404, "Organization not found")
+
+            # Check if subscription is active (for now, free tier and above are active)
+            subscription_active = org_row["plan_tier"] in ["free", "starter", "pro", "enterprise"]
+
+            # Get default agent for workspace
+            agent_row = await conn.fetchrow(
+                """
+                SELECT id, name FROM agents
+                WHERE workspace_id = $1::uuid AND is_active = true
+                ORDER BY created_at ASC
+                LIMIT 1
+                """,
+                workspace_id
+            )
+
+            if not agent_row:
+                raise HTTPException(404, "No active agent found for workspace")
+
+            agent_id = str(agent_row["id"])
+            agent_name = agent_row["name"]
+
+            # Update last_used_at for API key
+            await conn.execute(
+                "UPDATE api_keys SET last_used_at = NOW() WHERE id = $1::uuid",
+                key_row["id"]
+            )
+
+            return {
+                "workspace_id": workspace_id,
+                "agent_id": agent_id,
+                "agent_name": agent_name,
+                "subscription_active": subscription_active,
+                "plan_tier": org_row["plan_tier"]
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Widget validation error: {e}")
+        raise HTTPException(500, f"Validation failed: {str(e)}")
+
+
 # Development server
 if __name__ == "__main__":
     uvicorn.run(
