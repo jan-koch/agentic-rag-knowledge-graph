@@ -120,6 +120,14 @@ async def get_organization_endpoint(org_id: str):
     return Organization(**org)
 
 
+@router.get("/organizations", response_model=List[Organization])
+async def list_organizations_endpoint():
+    """List all organizations."""
+    from .db_utils import list_organizations
+    orgs = await list_organizations()
+    return [Organization(**org) for org in orgs]
+
+
 # ====================
 # Workspace Endpoints
 # ====================

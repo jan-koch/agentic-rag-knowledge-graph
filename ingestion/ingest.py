@@ -46,19 +46,22 @@ class DocumentIngestionPipeline:
         self,
         config: IngestionConfig,
         documents_folder: str = "documents",
-        clean_before_ingest: bool = False
+        clean_before_ingest: bool = False,
+        workspace_id: Optional[str] = None
     ):
         """
         Initialize ingestion pipeline.
-        
+
         Args:
             config: Ingestion configuration
             documents_folder: Folder containing markdown documents
             clean_before_ingest: Whether to clean existing data before ingestion
+            workspace_id: Optional workspace ID for multi-tenant ingestion
         """
         self.config = config
         self.documents_folder = documents_folder
         self.clean_before_ingest = clean_before_ingest
+        self.workspace_id = workspace_id
         
         # Initialize components
         self.chunker_config = ChunkingConfig(
@@ -346,20 +349,36 @@ class DocumentIngestionPipeline:
         async with db_pool.acquire() as conn:
             async with conn.transaction():
                 # Insert document
-                document_result = await conn.fetchrow(
-                    """
-                    INSERT INTO documents (title, source, content, metadata)
-                    VALUES ($1, $2, $3, $4)
-                    RETURNING id::text
-                    """,
-                    title,
-                    source,
-                    content,
-                    json.dumps(metadata)
-                )
-                
+                if self.workspace_id:
+                    # Multi-tenant mode: include workspace_id
+                    document_result = await conn.fetchrow(
+                        """
+                        INSERT INTO documents (title, source, content, metadata, workspace_id)
+                        VALUES ($1, $2, $3, $4, $5::uuid)
+                        RETURNING id::text
+                        """,
+                        title,
+                        source,
+                        content,
+                        json.dumps(metadata),
+                        self.workspace_id
+                    )
+                else:
+                    # Legacy mode: no workspace_id (for backward compatibility)
+                    document_result = await conn.fetchrow(
+                        """
+                        INSERT INTO documents (title, source, content, metadata)
+                        VALUES ($1, $2, $3, $4)
+                        RETURNING id::text
+                        """,
+                        title,
+                        source,
+                        content,
+                        json.dumps(metadata)
+                    )
+
                 document_id = document_result["id"]
-                
+
                 # Insert chunks
                 for chunk in chunks:
                     # Convert embedding to PostgreSQL vector string format
@@ -367,20 +386,37 @@ class DocumentIngestionPipeline:
                     if hasattr(chunk, 'embedding') and chunk.embedding:
                         # PostgreSQL vector format: '[1.0,2.0,3.0]' (no spaces after commas)
                         embedding_data = '[' + ','.join(map(str, chunk.embedding)) + ']'
-                    
-                    await conn.execute(
-                        """
-                        INSERT INTO chunks (document_id, content, embedding, chunk_index, metadata, token_count)
-                        VALUES ($1::uuid, $2, $3::vector, $4, $5, $6)
-                        """,
-                        document_id,
-                        chunk.content,
-                        embedding_data,
-                        chunk.index,
-                        json.dumps(chunk.metadata),
-                        chunk.token_count
-                    )
-                
+
+                    if self.workspace_id:
+                        # Multi-tenant mode: include workspace_id
+                        await conn.execute(
+                            """
+                            INSERT INTO chunks (document_id, content, embedding, chunk_index, metadata, token_count, workspace_id)
+                            VALUES ($1::uuid, $2, $3::vector, $4, $5, $6, $7::uuid)
+                            """,
+                            document_id,
+                            chunk.content,
+                            embedding_data,
+                            chunk.index,
+                            json.dumps(chunk.metadata),
+                            chunk.token_count,
+                            self.workspace_id
+                        )
+                    else:
+                        # Legacy mode: no workspace_id
+                        await conn.execute(
+                            """
+                            INSERT INTO chunks (document_id, content, embedding, chunk_index, metadata, token_count)
+                            VALUES ($1::uuid, $2, $3::vector, $4, $5, $6)
+                            """,
+                            document_id,
+                            chunk.content,
+                            embedding_data,
+                            chunk.index,
+                            json.dumps(chunk.metadata),
+                            chunk.token_count
+                        )
+
                 return document_id
     
     async def _clean_databases(self):
@@ -407,22 +443,26 @@ async def main():
     parser = argparse.ArgumentParser(description="Ingest documents into vector DB and knowledge graph")
     parser.add_argument("--documents", "-d", default="documents", help="Documents folder path")
     parser.add_argument("--clean", "-c", action="store_true", help="Clean existing data before ingestion")
+    parser.add_argument("--workspace-id", "-w", help="Workspace ID for multi-tenant ingestion")
     parser.add_argument("--chunk-size", type=int, default=1000, help="Chunk size for splitting documents")
     parser.add_argument("--chunk-overlap", type=int, default=200, help="Chunk overlap size")
     parser.add_argument("--no-semantic", action="store_true", help="Disable semantic chunking")
     parser.add_argument("--no-entities", action="store_true", help="Disable entity extraction")
     parser.add_argument("--fast", "-f", action="store_true", help="Fast mode: skip knowledge graph building")
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose logging")
-    
+
     args = parser.parse_args()
-    
+
+    # Also check for workspace_id in environment variable (for backward compatibility)
+    workspace_id = args.workspace_id or os.environ.get("INGESTION_WORKSPACE_ID")
+
     # Configure logging
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(
         level=log_level,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
-    
+
     # Create ingestion configuration
     config = IngestionConfig(
         chunk_size=args.chunk_size,
@@ -431,12 +471,13 @@ async def main():
         extract_entities=not args.no_entities,
         skip_graph_building=args.fast
     )
-    
+
     # Create and run pipeline
     pipeline = DocumentIngestionPipeline(
         config=config,
         documents_folder=args.documents,
-        clean_before_ingest=args.clean
+        clean_before_ingest=args.clean,
+        workspace_id=workspace_id
     )
     
     def progress_callback(current: int, total: int):

@@ -12,7 +12,7 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-API_BASE="http://localhost:8000/v1"
+API_BASE="http://localhost:8058/v1"
 
 echo -e "${BLUE}=====================================${NC}"
 echo -e "${BLUE}Multi-Tenant System Setup Test${NC}"
