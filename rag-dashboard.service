@@ -1,0 +1,26 @@
+[Unit]
+Description=Multi-Tenant RAG Admin Dashboard (Streamlit)
+After=network.target
+Wants=rag-api.service
+
+[Service]
+Type=simple
+User=jan
+Group=jan
+WorkingDirectory=/var/www/agentic-rag-knowledge-graph
+Environment="PATH=/var/www/agentic-rag-knowledge-graph/venv/bin"
+ExecStart=/var/www/agentic-rag-knowledge-graph/venv/bin/streamlit run webui.py --server.port 8501 --server.address 127.0.0.1
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/rag-dashboard.log
+StandardError=append:/var/log/rag-dashboard.log
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/www/agentic-rag-knowledge-graph
+
+[Install]
+WantedBy=multi-user.target

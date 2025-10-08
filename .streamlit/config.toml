@@ -1,14 +1,14 @@
 [server]
 port = 8501
-address = "0.0.0.0"
+address = "127.0.0.1"
 headless = true
 enableCORS = false
 enableXsrfProtection = true
 
 [browser]
 gatherUsageStats = false
-serverAddress = "bot.kobra-dataworks.de"
-serverPort = 443
+serverAddress = "localhost"
+serverPort = 8501
 
 [theme]
 primaryColor = "#FF4B4B"

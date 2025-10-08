@@ -2,7 +2,7 @@
 
 ## 🚀 Running the Multi-Tenant RAG System
 
-### Option 1: Local Development
+### Development Mode
 
 ```bash
 # 1. Start databases
@@ -11,31 +11,37 @@ docker compose up -d
 # 2. Start API server
 python -m agent.api_multi_tenant
 
-# 3. Start dashboard (in new terminal)
+# 3. Start dashboard
 streamlit run webui.py
 ```
 
 Access:
 - **API**: http://localhost:8058
-- **Dashboard**: http://localhost:8501
+- **Dashboard**: http://127.0.0.1:8501
+- **Public**: https://bot.kobra-dataworks.de (via Cloudflare tunnel)
 
-### Option 2: Production with Docker
+### Production Mode (Auto-Start on Boot)
 
 ```bash
-# 1. Start databases
-docker compose up -d
-
-# 2. Start API server
-python -m agent.api_multi_tenant
-
-# 3. Start dashboard in Docker
-docker compose -f docker-compose.dashboard.yml up -d --build
+# Install systemd service (one-time setup)
+sudo ./scripts/install-dashboard-service.sh
 ```
 
-Access:
-- **API**: http://localhost:8058 (internal only)
-- **Dashboard**: https://bot.kobra-dataworks.de (public)
-- **Dashboard (local)**: http://localhost:8501
+The dashboard will now:
+- Start automatically on server boot
+- Restart automatically if it crashes
+- Log to `/var/log/rag-dashboard.log`
+
+Service management:
+```bash
+sudo systemctl start rag-dashboard    # Start
+sudo systemctl stop rag-dashboard     # Stop
+sudo systemctl restart rag-dashboard  # Restart
+sudo systemctl status rag-dashboard   # Check status
+sudo journalctl -u rag-dashboard -f   # View logs
+```
+
+See [SYSTEMD_SERVICE.md](SYSTEMD_SERVICE.md) for details.
 
 ## 📋 First Time Setup
 
@@ -78,26 +84,26 @@ Dashboard → Chat
 - Select workspace and agent from sidebar
 - Start asking questions!
 
-## 🐳 Docker Commands
+## 🔧 Service Management
 
 ```bash
-# Build dashboard
-docker compose -f docker-compose.dashboard.yml build
+# Start dashboard service
+sudo systemctl start rag-dashboard
 
-# Start dashboard
-docker compose -f docker-compose.dashboard.yml up -d
+# Stop dashboard service
+sudo systemctl stop rag-dashboard
 
-# View logs
-docker compose -f docker-compose.dashboard.yml logs -f dashboard
+# Restart dashboard service
+sudo systemctl restart rag-dashboard
 
-# Stop dashboard
-docker compose -f docker-compose.dashboard.yml down
+# Check service status
+sudo systemctl status rag-dashboard
 
-# Restart dashboard
-docker compose -f docker-compose.dashboard.yml restart
+# View real-time logs
+sudo journalctl -u rag-dashboard -f
 
-# Rebuild and restart
-docker compose -f docker-compose.dashboard.yml up -d --build
+# View recent logs
+sudo journalctl -u rag-dashboard -n 100
 ```
 
 ## 🔍 Health Checks
@@ -107,10 +113,13 @@ docker compose -f docker-compose.dashboard.yml up -d --build
 curl http://localhost:8058/v1/health
 
 # Dashboard health (Streamlit)
-curl http://localhost:8501/_stcore/health
+curl http://127.0.0.1:8501/_stcore/health
 
-# Check running containers
-docker ps
+# Check dashboard service
+sudo systemctl is-active rag-dashboard
+
+# Check running processes
+ps aux | grep -E "(streamlit|api_multi_tenant)"
 ```
 
 ## 📊 Monitoring
@@ -143,17 +152,17 @@ Internet
     ↓
 bot.kobra-dataworks.de (HTTPS)
     ↓
-Reverse Proxy / Tunnel
+Cloudflare Tunnel
     ↓
-localhost:8501 (Dashboard) → localhost:8058 (API)
+127.0.0.1:8501 (Dashboard) → localhost:8058 (API)
 ```
 
-**Important**: Dashboard and API communicate via localhost. Your reverse proxy maps the public domain to localhost:8501.
+**Important**: Dashboard and API communicate via localhost. Cloudflare tunnel maps the public domain to 127.0.0.1:8501.
 
 ## 📚 Documentation
 
+- **SYSTEMD_SERVICE.md**: Systemd service setup and management
 - **RUN_DASHBOARD.md**: Basic dashboard usage
-- **DASHBOARD_DEPLOYMENT.md**: Detailed deployment guide
 - **WEBUI_GUIDE.md**: Dashboard features guide
 - **DATA_SAFETY.md**: Database safety practices
 - **N8N_INTEGRATION.md**: n8n workflow integration
@@ -172,31 +181,38 @@ python -m agent.api_multi_tenant
 ### Can't access bot.kobra-dataworks.de
 ```bash
 # Check dashboard is running
-curl http://localhost:8501/_stcore/health
+curl http://127.0.0.1:8501/_stcore/health
 
-# Check reverse proxy/tunnel configuration
+# Check dashboard service
+sudo systemctl status rag-dashboard
+
+# Check Cloudflare tunnel configuration
 ```
 
-### Docker container won't start
+### Dashboard service won't start
 ```bash
 # Check logs
-docker compose -f docker-compose.dashboard.yml logs dashboard
-
-# Rebuild image
-docker compose -f docker-compose.dashboard.yml build --no-cache
+sudo journalctl -u rag-dashboard -n 50
 
 # Check port not in use
 sudo lsof -i :8501
+
+# Check virtual environment
+ls -la /var/www/agentic-rag-knowledge-graph/venv/bin/streamlit
+
+# Reinstall service
+sudo ./scripts/install-dashboard-service.sh
 ```
 
 ## 🔐 Security Notes
 
-- Dashboard runs on localhost (not exposed directly)
-- API runs on localhost (not exposed directly)
-- Reverse proxy provides SSL/TLS
+- Dashboard runs on 127.0.0.1 (not exposed directly to internet)
+- API runs on localhost:8058 (not exposed directly)
+- Cloudflare tunnel provides SSL/TLS encryption
 - Use strong passwords in `.env`
 - Keep API keys secure
 - Enable `API_KEY_REQUIRED=true` in production
+- Service runs as user `jan` (not root)
 
 ## 🚦 Status Indicators
 
