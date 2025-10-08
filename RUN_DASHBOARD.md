@@ -2,6 +2,8 @@
 
 ## Quick Start
 
+### Local Development
+
 ```bash
 # 1. Make sure the API server is running
 python -m agent.api_multi_tenant
@@ -11,6 +13,25 @@ streamlit run webui.py
 ```
 
 The dashboard will open at http://localhost:8501
+
+### Docker Deployment
+
+```bash
+# Build and run dashboard in Docker (uses localhost:8058 for API)
+docker compose -f docker-compose.dashboard.yml up -d --build
+
+# View logs
+docker compose -f docker-compose.dashboard.yml logs -f
+
+# Stop dashboard
+docker compose -f docker-compose.dashboard.yml down
+```
+
+Dashboard accessible at:
+- Local: http://localhost:8501
+- Public (when mapped): https://bot.kobra-dataworks.de
+
+**Note**: The dashboard uses `localhost` for all connections. Set up your reverse proxy/tunnel to map `localhost:8501` to your public domain.
 
 ## Features
 
@@ -63,12 +84,13 @@ The dashboard will open at http://localhost:8501
 
 ## Configuration
 
-The dashboard connects to the API at `http://localhost:8058/v1` by default.
+The dashboard is configured to use `localhost` for all connections:
+- **API**: `http://localhost:8058/v1` (line 14 in `webui.py`)
+- **Dashboard**: `http://localhost:8501` (Streamlit default)
 
-To change the API URL, edit `webui.py`:
-```python
-API_BASE_URL = "http://your-api-url:port/v1"
-```
+**Do not change these URLs.** Your reverse proxy/tunnel will map `localhost:8501` to `bot.kobra-dataworks.de`.
+
+For detailed Docker deployment and reverse proxy setup, see [DASHBOARD_DEPLOYMENT.md](DASHBOARD_DEPLOYMENT.md).
 
 ## Requirements
 
