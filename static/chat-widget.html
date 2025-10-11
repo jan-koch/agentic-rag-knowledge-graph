@@ -372,6 +372,20 @@
         };
         document.getElementById('chat-input').placeholder = placeholders[LANGUAGE] || placeholders.en;
 
+        // Set Send button text based on language
+        const sendButtonTexts = {
+            en: 'Send',
+            de: 'Senden'
+        };
+        document.getElementById('send-button').textContent = sendButtonTexts[LANGUAGE] || sendButtonTexts.en;
+
+        // Set New Chat button text based on language
+        const newChatButtonTexts = {
+            en: 'New Chat',
+            de: 'Neuer Chat'
+        };
+        document.getElementById('new-chat-button').textContent = newChatButtonTexts[LANGUAGE] || newChatButtonTexts.en;
+
         // DOM elements
         const chatMessages = document.getElementById('chat-messages');
         const chatInput = document.getElementById('chat-input');
@@ -508,10 +522,16 @@
 
         // Restore conversation from history
         async function restoreConversation(sessionId) {
-            // Show loading indicator
+            // Show loading indicator with translated message
+            const restoringMessages = {
+                en: 'Restoring conversation...',
+                de: 'Konversation wird wiederhergestellt...'
+            };
+            const restoringMessage = restoringMessages[LANGUAGE] || restoringMessages.en;
+
             const loadingDiv = document.createElement('div');
             loadingDiv.className = 'message assistant';
-            loadingDiv.innerHTML = '<div class="message-avatar">A</div><div class="message-content"><em>Restoring conversation...</em></div>';
+            loadingDiv.innerHTML = `<div class="message-avatar">A</div><div class="message-content"><em>${restoringMessage}</em></div>`;
             chatMessages.appendChild(loadingDiv);
 
             // Load messages
