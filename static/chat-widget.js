@@ -1,5 +1,5 @@
 /**
- * Ihnen Chat Widget - Simple JavaScript Embed
+ * RAG Chat Widget - Simple JavaScript Embed
  *
  * Usage: Add this script tag to your HTML:
  * <script src="https://botapi.kobra-dataworks.de/static/chat-widget.js"></script>
@@ -13,17 +13,24 @@
         apiUrl: 'https://botapi.kobra-dataworks.de',
         workspaceId: '518341a0-ae02-4e28-b161-11ea84a392c1',
         agentId: '40ab91a7-a111-48ea-b4cd-f831efeaeff2',
-        agentName: 'Ihnen Support Bot',
+        agentName: 'Support Bot',
+        greeting: 'Hallo! Wie kann ich Ihnen helfen?', // Default German greeting
+        language: 'de', // Default to German
         primaryColor: '#667eea',
         position: 'bottom-right' // bottom-right, bottom-left, top-right, top-left
     };
 
     // Check if widget is already initialized
-    if (window.IhnenChatWidget) return;
+    if (window.RagChatWidget) return;
+
+    // Build iframe src with greeting and language
+    const greeting = config.greeting || `Hi! I'm ${config.agentName}. How can I help?`;
+    const language = config.language || 'de';
+    const iframeSrc = `${config.apiUrl}/widget/chat?workspace_id=${config.workspaceId}&agent_id=${config.agentId}&agent_name=${encodeURIComponent(config.agentName)}&api_url=${encodeURIComponent(config.apiUrl)}&greeting=${encodeURIComponent(greeting)}&language=${language}`;
 
     // Create widget HTML
     const widgetHTML = `
-        <div id="ihnen-chat-widget" style="
+        <div id="rag-chat-widget" style="
             position: fixed;
             ${config.position.includes('bottom') ? 'bottom: 20px;' : 'top: 20px;'}
             ${config.position.includes('right') ? 'right: 20px;' : 'left: 20px;'}
@@ -31,7 +38,7 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
         ">
             <!-- Chat Button -->
-            <button id="ihnen-chat-toggle" style="
+            <button id="rag-chat-toggle" style="
                 background: linear-gradient(135deg, ${config.primaryColor} 0%, #764ba2 100%);
                 color: white;
                 border: none;
@@ -51,7 +58,7 @@
             </button>
 
             <!-- Chat Window -->
-            <div id="ihnen-chat-window" style="
+            <div id="rag-chat-window" style="
                 display: none;
                 position: absolute;
                 ${config.position.includes('bottom') ? 'bottom: 80px;' : 'top: 80px;'}
@@ -67,8 +74,8 @@
                 animation: slideUp 0.3s ease;
             ">
                 <iframe
-                    id="ihnen-chat-iframe"
-                    src="${config.apiUrl}/widget/chat?workspace_id=${config.workspaceId}&agent_id=${config.agentId}&agent_name=${encodeURIComponent(config.agentName)}&api_url=${encodeURIComponent(config.apiUrl)}"
+                    id="rag-chat-iframe"
+                    src="${iframeSrc}"
                     style="width: 100%; height: 100%; border: none;"
                     allow="clipboard-write">
                 </iframe>
@@ -87,17 +94,17 @@
                 }
             }
 
-            #ihnen-chat-toggle:hover {
+            #rag-chat-toggle:hover {
                 transform: scale(1.05);
                 box-shadow: 0 6px 16px rgba(0,0,0,0.2);
             }
 
-            #ihnen-chat-toggle:active {
+            #rag-chat-toggle:active {
                 transform: scale(0.95);
             }
 
             @media (max-width: 640px) {
-                #ihnen-chat-window {
+                #rag-chat-window {
                     width: calc(100vw - 40px) !important;
                     height: calc(100vh - 120px) !important;
                 }
@@ -119,8 +126,8 @@
         document.body.appendChild(container);
 
         // Get elements
-        const toggleBtn = document.getElementById('ihnen-chat-toggle');
-        const chatWindow = document.getElementById('ihnen-chat-window');
+        const toggleBtn = document.getElementById('rag-chat-toggle');
+        const chatWindow = document.getElementById('rag-chat-window');
         let isOpen = false;
 
         // Toggle chat
@@ -132,7 +139,7 @@
 
             // Focus iframe when opened
             if (isOpen) {
-                const iframe = document.getElementById('ihnen-chat-iframe');
+                const iframe = document.getElementById('rag-chat-iframe');
                 iframe.focus();
             }
         });
@@ -148,7 +155,7 @@
         });
 
         // Public API
-        window.IhnenChatWidget = {
+        window.RagChatWidget = {
             open: () => {
                 if (!isOpen) toggleBtn.click();
             },

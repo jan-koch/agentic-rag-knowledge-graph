@@ -332,12 +332,21 @@
         const WORKSPACE_ID = urlParams.get('workspace_id');
         const AGENT_ID = urlParams.get('agent_id');
         const AGENT_NAME = urlParams.get('agent_name') || 'Chat Support';
+        const GREETING = urlParams.get('greeting') || 'Hello! How can I help you today?';
+        const LANGUAGE = urlParams.get('language') || 'en';
 
         let sessionId = null;
         let isLoading = false;
 
         // Set agent name in header
         document.getElementById('agent-name').textContent = AGENT_NAME;
+
+        // Set input placeholder based on language
+        const placeholders = {
+            en: 'Type your message...',
+            de: 'Geben Sie Ihre Nachricht ein...'
+        };
+        document.getElementById('chat-input').placeholder = placeholders[LANGUAGE] || placeholders.en;
 
         // DOM elements
         const chatMessages = document.getElementById('chat-messages');
@@ -491,9 +500,9 @@
         // Focus input on load
         chatInput.focus();
 
-        // Add welcome message
+        // Add welcome message using custom greeting
         if (WORKSPACE_ID && AGENT_ID) {
-            addMessage('assistant', 'Hello! How can I help you today?');
+            addMessage('assistant', GREETING);
         } else {
             showError('Widget not properly configured. Please provide workspace_id and agent_id parameters.');
         }

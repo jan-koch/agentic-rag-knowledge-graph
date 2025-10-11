@@ -1147,12 +1147,13 @@ elif page == "🔌 Widget Embed":
 
                 floating_code = f"""<!-- {details['agent_name']} Floating Chat Widget -->
 <script>
-  window.IHNEN_CHAT_CONFIG = {{
+  window.RAG_CHAT_CONFIG = {{
     apiKey: '{api_key_value}',{' // ✅ Pre-filled' if prefilled_api_key else ' // Replace with actual API key'}
     workspaceId: '{details['workspace_id']}',
     agentId: '{details['agent_id']}',
     agentName: '{details['agent_name']}',
-    greeting: '{custom_greeting or f"Hi! I'm {details['agent_name']}. How can I help?"}',
+    greeting: '{custom_greeting or f"Hallo! Ich bin {details['agent_name']}. Wie kann ich Ihnen helfen?"}',
+    language: 'de', // 'de' for German, 'en' for English
     position: 'bottom-right',
     theme: 'light'
   }};
@@ -1241,18 +1242,21 @@ elif page == "🔌 Widget Embed":
 
             ```javascript
             // Open the chat widget
-            window.IhnenChat.open();
+            window.RagChatWidget.open();
 
             // Close the chat widget
-            window.IhnenChat.close();
+            window.RagChatWidget.close();
 
-            // Send a message programmatically
-            window.IhnenChat.sendMessage("Hello!");
+            // Toggle the chat widget
+            window.RagChatWidget.toggle();
 
-            // Listen for events
-            window.IhnenChat.on('message', function(data) {{
-                console.log('New message:', data);
-            }});
+            // Check if widget is open
+            if (window.RagChatWidget.isOpen()) {{
+                console.log('Widget is open');
+            }}
+
+            // Reload the widget
+            window.RagChatWidget.reload();
             ```
             """)
 

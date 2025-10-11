@@ -1,9 +1,9 @@
 /**
- * Ihnen Chat Widget - Secure Version with API Key
+ * RAG Chat Widget - Secure Version with API Key
  *
  * Usage:
  * <script>
- *   window.IHNEN_CHAT_CONFIG = {
+ *   window.RAG_CHAT_CONFIG = {
  *     apiKey: 'your-workspace-api-key',
  *     apiUrl: 'https://botapi.kobra-dataworks.de'
  *   };
@@ -13,10 +13,10 @@
 
 (function() {
     // Get configuration from global variable
-    const config = window.IHNEN_CHAT_CONFIG || {};
+    const config = window.RAG_CHAT_CONFIG || {};
 
     if (!config.apiKey) {
-        console.error('Ihnen Chat Widget: ' + (config.language === 'en' ? 'API key is required. Set window.IHNEN_CHAT_CONFIG.apiKey' : 'API-Schlüssel erforderlich. Setzen Sie window.IHNEN_CHAT_CONFIG.apiKey'));
+        console.error('RAG Chat Widget: ' + (config.language === 'en' ? 'API key is required. Set window.RAG_CHAT_CONFIG.apiKey' : 'API-Schlüssel erforderlich. Setzen Sie window.RAG_CHAT_CONFIG.apiKey'));
         return;
     }
 
@@ -29,7 +29,7 @@
     const translations = {
         en: {
             error_prefix: 'Chat Widget Error: ',
-            api_key_required: 'API key is required. Set window.IHNEN_CHAT_CONFIG.apiKey',
+            api_key_required: 'API key is required. Set window.RAG_CHAT_CONFIG.apiKey',
             invalid_api_key: 'Invalid API key',
             subscription_inactive: 'Subscription is not active',
             validation_failed: 'Validation failed: ',
@@ -37,7 +37,7 @@
         },
         de: {
             error_prefix: 'Chat-Widget Fehler: ',
-            api_key_required: 'API-Schlüssel erforderlich. Setzen Sie window.IHNEN_CHAT_CONFIG.apiKey',
+            api_key_required: 'API-Schlüssel erforderlich. Setzen Sie window.RAG_CHAT_CONFIG.apiKey',
             invalid_api_key: 'Ungültiger API-Schlüssel',
             subscription_inactive: 'Abonnement ist nicht aktiv',
             validation_failed: 'Validierung fehlgeschlagen: ',
@@ -48,7 +48,7 @@
     const t = translations[language];
 
     // Check if widget is already initialized
-    if (window.IhnenChatWidget) return;
+    if (window.RagChatWidget) return;
 
     let workspaceId = null;
     let agentId = null;
@@ -85,7 +85,7 @@
 
             return true;
         } catch (error) {
-            console.error('Ihnen Chat Widget validation failed:', error.message);
+            console.error('RAG Chat Widget validation failed:', error.message);
             showError(error.message);
             return false;
         }
@@ -115,7 +115,7 @@
 
     // Create widget HTML
     const widgetHTML = `
-        <div id="ihnen-chat-widget" style="
+        <div id="rag-chat-widget" style="
             position: fixed;
             ${position.includes('bottom') ? 'bottom: 20px;' : 'top: 20px;'}
             ${position.includes('right') ? 'right: 20px;' : 'left: 20px;'}
@@ -123,7 +123,7 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
         ">
             <!-- Chat Button -->
-            <button id="ihnen-chat-toggle" style="
+            <button id="rag-chat-toggle" style="
                 background: linear-gradient(135deg, ${primaryColor} 0%, #764ba2 100%);
                 color: white;
                 border: none;
@@ -143,7 +143,7 @@
             </button>
 
             <!-- Chat Window -->
-            <div id="ihnen-chat-window" style="
+            <div id="rag-chat-window" style="
                 display: none;
                 position: absolute;
                 ${position.includes('bottom') ? 'bottom: 80px;' : 'top: 80px;'}
@@ -158,7 +158,7 @@
                 overflow: hidden;
                 animation: slideUp 0.3s ease;
             ">
-                <div id="ihnen-chat-content" style="width: 100%; height: 100%;"></div>
+                <div id="rag-chat-content" style="width: 100%; height: 100%;"></div>
             </div>
         </div>
 
@@ -174,17 +174,17 @@
                 }
             }
 
-            #ihnen-chat-toggle:hover {
+            #rag-chat-toggle:hover {
                 transform: scale(1.05);
                 box-shadow: 0 6px 16px rgba(0,0,0,0.2);
             }
 
-            #ihnen-chat-toggle:active {
+            #rag-chat-toggle:active {
                 transform: scale(0.95);
             }
 
             @media (max-width: 640px) {
-                #ihnen-chat-window {
+                #rag-chat-window {
                     width: calc(100vw - 40px) !important;
                     height: calc(100vh - 120px) !important;
                 }
@@ -199,10 +199,15 @@
             return;
         }
 
-        const chatContent = document.getElementById('ihnen-chat-content');
+        const chatContent = document.getElementById('rag-chat-content');
         const iframe = document.createElement('iframe');
-        iframe.id = 'ihnen-chat-iframe';
-        iframe.src = `${apiUrl}/widget/chat?workspace_id=${workspaceId}&agent_id=${agentId}&agent_name=${encodeURIComponent(agentName)}&api_url=${encodeURIComponent(apiUrl)}`;
+        iframe.id = 'rag-chat-iframe';
+
+        // Get greeting and language from config
+        const greeting = config.greeting || `Hi! I'm ${agentName}. How can I help?`;
+        const widgetLanguage = config.language || language || 'de';
+
+        iframe.src = `${apiUrl}/widget/chat?workspace_id=${workspaceId}&agent_id=${agentId}&agent_name=${encodeURIComponent(agentName)}&api_url=${encodeURIComponent(apiUrl)}&greeting=${encodeURIComponent(greeting)}&language=${widgetLanguage}`;
         iframe.style.cssText = 'width: 100%; height: 100%; border: none;';
         iframe.allow = 'clipboard-write';
 
@@ -230,8 +235,8 @@
         document.body.appendChild(container);
 
         // Get elements
-        const toggleBtn = document.getElementById('ihnen-chat-toggle');
-        const chatWindow = document.getElementById('ihnen-chat-window');
+        const toggleBtn = document.getElementById('rag-chat-toggle');
+        const chatWindow = document.getElementById('rag-chat-window');
         let isOpen = false;
 
         // Toggle chat
@@ -242,13 +247,13 @@
             toggleBtn.style.transform = isOpen ? 'rotate(90deg)' : 'rotate(0deg)';
 
             // Load chat iframe when first opened
-            if (isOpen && !document.getElementById('ihnen-chat-iframe')) {
+            if (isOpen && !document.getElementById('rag-chat-iframe')) {
                 loadChat();
             }
 
             // Focus iframe when opened
             if (isOpen) {
-                const iframe = document.getElementById('ihnen-chat-iframe');
+                const iframe = document.getElementById('rag-chat-iframe');
                 if (iframe) iframe.focus();
             }
         });
@@ -264,7 +269,7 @@
         });
 
         // Public API
-        window.IhnenChatWidget = {
+        window.RagChatWidget = {
             open: () => {
                 if (!isOpen) toggleBtn.click();
             },
