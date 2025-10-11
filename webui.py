@@ -7,8 +7,12 @@ A Streamlit-based web UI for managing organizations, workspaces, agents, and API
 import streamlit as st
 import requests
 import json
+import os
+import asyncio
+import glob
 from datetime import datetime
 from typing import Optional, Dict, Any, List
+from pathlib import Path
 
 # Configuration
 API_BASE_URL = "http://localhost:8058/v1"
@@ -97,13 +101,88 @@ def format_datetime(dt_str: str) -> str:
         return dt_str
 
 
+def find_documents(directory: str = "documents") -> List[str]:
+    """Find all markdown and text files in directory."""
+    if not os.path.exists(directory):
+        return []
+
+    patterns = ["*.md", "*.markdown", "*.txt"]
+    files = []
+
+    for pattern in patterns:
+        files.extend(glob.glob(os.path.join(directory, "**", pattern), recursive=True))
+
+    return sorted(files)
+
+
+async def ingest_documents_for_workspace(workspace_id: str, documents_folder: str, clean: bool = False):
+    """
+    Ingest documents for a specific workspace.
+
+    Args:
+        workspace_id: UUID of the workspace
+        documents_folder: Path to documents folder
+        clean: Whether to clean existing data first
+
+    Returns:
+        Dict with ingestion results
+    """
+    try:
+        # Import ingestion module
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent))
+
+        from ingestion.ingest import DocumentIngestionPipeline, IngestionConfig
+
+        # Create configuration
+        config = IngestionConfig(
+            chunk_size=1000,
+            chunk_overlap=200,
+            use_semantic_chunking=True,
+            extract_entities=True,
+            skip_graph_building=False
+        )
+
+        # Create pipeline
+        pipeline = DocumentIngestionPipeline(
+            config=config,
+            documents_folder=documents_folder,
+            clean_before_ingest=clean,
+            workspace_id=workspace_id
+        )
+
+        # Run ingestion
+        results = await pipeline.ingest_documents()
+        await pipeline.close()
+
+        # Calculate summary
+        total_chunks = sum(r.chunks_created for r in results)
+        total_entities = sum(r.entities_extracted for r in results)
+        total_errors = sum(len(r.errors) for r in results)
+
+        return {
+            "success": True,
+            "documents_processed": len(results),
+            "total_chunks": total_chunks,
+            "total_entities": total_entities,
+            "total_errors": total_errors,
+            "results": results
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
 # Sidebar navigation
 st.sidebar.markdown("# 🤖 Multi-Tenant RAG")
 st.sidebar.markdown("---")
 
 page = st.sidebar.radio(
     "Navigation",
-    ["📊 Dashboard", "🏢 Organizations", "📁 Workspaces", "🤖 Agents", "🔑 API Keys", "💬 Chat", "🏥 Health"]
+    ["📊 Dashboard", "🏢 Organizations", "📁 Workspaces", "🤖 Agents", "🔑 API Keys", "🔌 Widget Embed", "💬 Chat", "🏥 Health"]
 )
 
 st.sidebar.markdown("---")
@@ -562,13 +641,86 @@ elif page == "📁 Workspaces":
 
                                 # Show ingestion actions
                                 st.markdown("**Quick Actions:**")
+
+                                # Document ingestion section
+                                with st.expander("📤 Ingest Documents", expanded=False):
+                                    # Find available documents
+                                    doc_folder = st.text_input(
+                                        "Documents Folder",
+                                        value="documents",
+                                        key=f"doc_folder_{ws['id']}",
+                                        help="Path to the folder containing documents to ingest"
+                                    )
+
+                                    available_docs = find_documents(doc_folder)
+
+                                    if available_docs:
+                                        st.success(f"✅ Found {len(available_docs)} document(s)")
+                                        with st.expander("📄 View Files", expanded=False):
+                                            for doc in available_docs:
+                                                st.caption(f"• {os.path.relpath(doc, doc_folder)}")
+
+                                        col_ing1, col_ing2 = st.columns(2)
+
+                                        with col_ing1:
+                                            clean_mode = st.checkbox(
+                                                "Clean before ingest",
+                                                key=f"clean_{ws['id']}",
+                                                help="Remove existing documents before ingesting new ones"
+                                            )
+
+                                        with col_ing2:
+                                            if st.button(
+                                                "🚀 Start Ingestion",
+                                                key=f"start_ingest_{ws['id']}",
+                                                type="primary"
+                                            ):
+                                                with st.spinner("Ingesting documents... This may take a few minutes."):
+                                                    # Run ingestion in async context
+                                                    result = asyncio.run(
+                                                        ingest_documents_for_workspace(
+                                                            workspace_id=ws['id'],
+                                                            documents_folder=doc_folder,
+                                                            clean=clean_mode
+                                                        )
+                                                    )
+
+                                                    if result.get("success"):
+                                                        st.success("✅ Ingestion completed!")
+                                                        st.markdown(f"""
+                                                        **Summary:**
+                                                        - Documents processed: {result['documents_processed']}
+                                                        - Total chunks: {result['total_chunks']}
+                                                        - Entities extracted: {result['total_entities']}
+                                                        - Errors: {result['total_errors']}
+                                                        """)
+
+                                                        # Show detailed results
+                                                        if result.get('results'):
+                                                            with st.expander("📊 Detailed Results"):
+                                                                for doc_result in result['results']:
+                                                                    status = "✅" if not doc_result.errors else "⚠️"
+                                                                    st.markdown(f"{status} **{doc_result.title}**")
+                                                                    st.caption(f"Chunks: {doc_result.chunks_created} | Entities: {doc_result.entities_extracted}")
+                                                                    if doc_result.errors:
+                                                                        for error in doc_result.errors:
+                                                                            st.error(f"Error: {error}")
+
+                                                        # Refresh to update document count
+                                                        st.info("💡 Refresh the page to see updated document counts")
+                                                    else:
+                                                        st.error(f"❌ Ingestion failed: {result.get('error')}")
+                                    else:
+                                        st.warning(f"⚠️ No documents found in `{doc_folder}`")
+                                        st.caption("Supported formats: .md, .markdown, .txt")
+
                                 action_col1, action_col2 = st.columns(2)
                                 with action_col1:
-                                    if st.button("📤 Ingest Documents", key=f"ingest_{ws['id']}"):
-                                        st.info("Use `python ingest_workspace.py --workspace-id " + ws['id'] + " --path /path/to/docs`")
-                                with action_col2:
-                                    if st.button("📊 View Details", key=f"view_{ws['id']}"):
+                                    if st.button("📊 View Full Details", key=f"view_{ws['id']}"):
                                         st.json(ws)
+                                with action_col2:
+                                    if st.button("🔄 Refresh", key=f"refresh_{ws['id']}"):
+                                        st.rerun()
 
                         st.markdown("---")
                 else:
@@ -714,55 +866,427 @@ elif page == "🔑 API Keys":
 
     st.warning("⚠️ API keys are only shown once at creation time. Store them securely!")
 
-    st.markdown("### Create New API Key")
-    with st.form("create_api_key_form"):
-        key_ws_id = st.text_input("Workspace ID", placeholder="uuid")
-        key_name = st.text_input("Key Name", placeholder="Production Key")
+    # Fetch organizations and workspaces for dropdown
+    orgs_result = api_request("GET", "/organizations")
+    workspace_options = {}
+    workspace_to_org = {}
 
-        col_a, col_b = st.columns(2)
-        with col_a:
-            key_scopes = st.multiselect(
-                "Scopes",
-                ["chat", "search", "ingest", "admin"],
-                default=["chat", "search"]
-            )
-        with col_b:
-            key_rate_limit = st.number_input("Rate Limit (requests/min)", value=60, min_value=1)
+    if orgs_result.get("success") and orgs_result["data"]:
+        for org in orgs_result["data"]:
+            ws_result = api_request("GET", f"/organizations/{org['id']}/workspaces")
+            if ws_result.get("success") and ws_result["data"]:
+                for ws in ws_result["data"]:
+                    label = f"{ws['name']} ({ws['slug']}) - {org['name']}"
+                    workspace_options[label] = ws['id']
+                    workspace_to_org[ws['id']] = {
+                        'org_name': org['name'],
+                        'org_slug': org['slug'],
+                        'plan_tier': org['plan_tier']
+                    }
 
-        key_expires = st.checkbox("Set expiration date")
-        key_expires_at = None
-        if key_expires:
-            key_expires_at = st.date_input("Expires at")
+    col1, col2 = st.columns([2, 1])
 
-        if st.form_submit_button("Create API Key", type="primary"):
-            data = {
-                "name": key_name,
-                "scopes": key_scopes,
-                "rate_limit_per_minute": key_rate_limit
-            }
-            if key_expires_at:
-                data["expires_at"] = key_expires_at.isoformat()
+    with col1:
+        st.markdown("### Create New API Key")
+        with st.form("create_api_key_form"):
+            if workspace_options:
+                selected_workspace = st.selectbox(
+                    "Select Workspace",
+                    options=list(workspace_options.keys()),
+                    help="Choose which workspace this API key belongs to"
+                )
+                key_ws_id = workspace_options[selected_workspace]
 
-            result = api_request("POST", f"/workspaces/{key_ws_id}/api-keys", data)
-
-            if result.get("success"):
-                key_data = result["data"]
-                st.success("✅ API Key created successfully!")
-                st.markdown(f"""
-                <div class="success-box">
-                <strong>⚠️ SAVE THIS KEY - IT WON'T BE SHOWN AGAIN!</strong><br><br>
-                <strong>API Key:</strong><br>
-                <code style="font-size: 1.1rem; background: #f8f9fa; padding: 0.5rem; border-radius: 0.25rem; display: block; margin: 0.5rem 0;">
-                {key_data['key']}
-                </code><br>
-                <strong>Key ID:</strong> {key_data['id']}<br>
-                <strong>Name:</strong> {key_data['name']}<br>
-                <strong>Workspace ID:</strong> {key_data['workspace_id']}<br>
-                <strong>Created:</strong> {format_datetime(key_data['created_at'])}
-                </div>
-                """, unsafe_allow_html=True)
+                # Show organization context
+                org_info = workspace_to_org.get(key_ws_id, {})
+                st.caption(f"Organization: {org_info.get('org_name', 'Unknown')} ({org_info.get('plan_tier', 'free').upper()})")
+                st.caption(f"Workspace ID: `{key_ws_id}`")
             else:
-                st.error(f"❌ Failed to create API key: {result.get('error')}")
+                st.warning("⚠️ No workspaces found. Create a workspace first!")
+                key_ws_id = st.text_input("Workspace ID (manual)", placeholder="uuid")
+
+            key_name = st.text_input("Key Name", placeholder="Production Key")
+
+            col_a, col_b = st.columns(2)
+            with col_a:
+                key_scopes = st.multiselect(
+                    "Scopes",
+                    ["chat", "search", "ingest", "admin"],
+                    default=["chat", "search"],
+                    help="Permissions for this API key"
+                )
+            with col_b:
+                key_rate_limit = st.number_input("Rate Limit (requests/min)", value=60, min_value=1, max_value=1000)
+
+            key_expires = st.checkbox("Set expiration date")
+            key_expires_at = None
+            if key_expires:
+                key_expires_at = st.date_input("Expires at")
+
+            if st.form_submit_button("Create API Key", type="primary"):
+                if not key_ws_id:
+                    st.error("❌ Please select a workspace")
+                else:
+                    data = {
+                        "name": key_name,
+                        "scopes": key_scopes,
+                        "rate_limit_per_minute": key_rate_limit
+                    }
+                    if key_expires_at:
+                        data["expires_at"] = key_expires_at.isoformat()
+
+                    result = api_request("POST", f"/workspaces/{key_ws_id}/api-keys", data)
+
+                    if result.get("success"):
+                        key_data = result["data"]
+                        st.success("✅ API Key created successfully!")
+                        st.markdown(f"""
+                        <div class="success-box">
+                        <strong>⚠️ SAVE THIS KEY - IT WON'T BE SHOWN AGAIN!</strong><br><br>
+                        <strong>API Key:</strong><br>
+                        <code style="font-size: 1.1rem; background: #f8f9fa; padding: 0.5rem; border-radius: 0.25rem; display: block; margin: 0.5rem 0;">
+                        {key_data['key']}
+                        </code><br>
+                        <strong>Key ID:</strong> {key_data['id']}<br>
+                        <strong>Name:</strong> {key_data['name']}<br>
+                        <strong>Workspace ID:</strong> {key_data['workspace_id']}<br>
+                        <strong>Created:</strong> {key_data['created_at']}
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                        # Provide quick action to use this key in widget embed
+                        st.markdown("---")
+                        st.markdown("### ⚡ Quick Actions")
+                        col_action1, col_action2 = st.columns(2)
+                        with col_action1:
+                            # Create URL with API key parameter
+                            widget_url = f"?api_key={key_data['key']}"
+                            st.link_button(
+                                "🔌 Use in Widget Embed",
+                                url=widget_url,
+                                help="Navigate to Widget Embed page with this API key pre-filled",
+                                use_container_width=True,
+                                type="primary"
+                            )
+                        with col_action2:
+                            st.caption("💡 The API key will be automatically filled in the widget embed code")
+                    else:
+                        st.error(f"❌ Failed to create API key: {result.get('error')}")
+
+    with col2:
+        st.markdown("### Quick Info")
+        st.info("""
+        **API Key Features:**
+        - Organization-scoped authentication
+        - Per-workspace isolation
+        - Customizable rate limits
+        - Scope-based permissions
+        - Optional expiration dates
+
+        **Usage:**
+        ```bash
+        curl -H "Authorization: Bearer YOUR_KEY" \\
+             https://api.example.com/v1/chat
+        ```
+        """)
+
+    st.markdown("---")
+    st.markdown("### API Keys by Organization")
+
+    if orgs_result.get("success") and orgs_result["data"]:
+        for org in orgs_result["data"]:
+            with st.expander(f"🏢 {org['name']} ({org['plan_tier'].upper()})", expanded=False):
+                ws_result = api_request("GET", f"/organizations/{org['id']}/workspaces")
+
+                if ws_result.get("success") and ws_result["data"]:
+                    for ws in ws_result["data"]:
+                        st.markdown(f"#### 📁 {ws['name']} ({ws['slug']})")
+
+                        # Fetch API keys for this workspace
+                        keys_result = api_request("GET", f"/workspaces/{ws['id']}/api-keys")
+
+                        if keys_result.get("success") and keys_result["data"]:
+                            for key in keys_result["data"]:
+                                col_k1, col_k2, col_k3, col_k4 = st.columns([3, 2, 2, 1])
+
+                                with col_k1:
+                                    st.markdown(f"**{key['name']}**")
+                                    st.caption(f"Prefix: `{key['key_prefix']}...`")
+
+                                with col_k2:
+                                    scopes_str = ", ".join(key.get('scopes', []))
+                                    st.caption(f"Scopes: {scopes_str}")
+
+                                with col_k3:
+                                    if key.get('is_active'):
+                                        st.success("✅ Active")
+                                    else:
+                                        st.error("❌ Revoked")
+
+                                    if key.get('last_used_at'):
+                                        st.caption(f"Last used: {format_datetime(key['last_used_at'])}")
+                                    else:
+                                        st.caption("Never used")
+
+                                with col_k4:
+                                    if key.get('is_active') and st.button("🗑️", key=f"revoke_{key['id']}", help="Revoke this key"):
+                                        revoke_result = api_request("DELETE", f"/workspaces/{ws['id']}/api-keys/{key['id']}")
+                                        if revoke_result.get("success"):
+                                            st.success("Key revoked")
+                                            st.rerun()
+                                        else:
+                                            st.error("Failed to revoke")
+
+                                st.markdown("---")
+                        else:
+                            st.info("No API keys created for this workspace")
+                            st.caption(f"Create one above by selecting workspace '{ws['name']}'")
+                else:
+                    st.info("No workspaces in this organization")
+    else:
+        st.info("No organizations found. Create an organization first!")
+
+
+# ==========================================
+# WIDGET EMBED PAGE
+# ==========================================
+elif page == "🔌 Widget Embed":
+    st.markdown('<div class="section-header">Widget Embed Code Generator</div>', unsafe_allow_html=True)
+
+    st.info("💡 Generate embeddable chat widgets for your agents. Choose an agent and copy the embed code to add a chat interface to any website.")
+
+    # Fetch organizations, workspaces, and agents
+    orgs_result = api_request("GET", "/organizations")
+    agent_options = {}
+    agent_details = {}
+
+    if orgs_result.get("success") and orgs_result["data"]:
+        for org in orgs_result["data"]:
+            ws_result = api_request("GET", f"/organizations/{org['id']}/workspaces")
+            if ws_result.get("success") and ws_result["data"]:
+                for ws in ws_result["data"]:
+                    agents_result = api_request("GET", f"/workspaces/{ws['id']}/agents")
+                    if agents_result.get("success") and agents_result["data"]:
+                        for agent in agents_result["data"]:
+                            if agent['is_active']:
+                                label = f"{agent['name']} - {ws['name']} ({org['name']})"
+                                agent_options[label] = agent['id']
+                                agent_details[agent['id']] = {
+                                    'agent_id': agent['id'],
+                                    'agent_name': agent['name'],
+                                    'agent_slug': agent['slug'],
+                                    'workspace_id': ws['id'],
+                                    'workspace_name': ws['name'],
+                                    'workspace_slug': ws['slug'],
+                                    'org_id': org['id'],
+                                    'org_name': org['name'],
+                                    'org_slug': org['slug'],
+                                    'plan_tier': org['plan_tier']
+                                }
+
+    if agent_options:
+        col1, col2 = st.columns([1, 1])
+
+        with col1:
+            st.markdown("### Select Agent")
+            selected_agent_label = st.selectbox(
+                "Choose an agent to generate embed code",
+                options=list(agent_options.keys())
+            )
+
+            selected_agent_id = agent_options[selected_agent_label]
+            details = agent_details[selected_agent_id]
+
+            st.markdown(f"""
+            <div class="info-card">
+            <strong>Agent:</strong> {details['agent_name']}<br>
+            <strong>Workspace:</strong> {details['workspace_name']}<br>
+            <strong>Organization:</strong> {details['org_name']} ({details['plan_tier'].upper()})<br>
+            <strong>Agent ID:</strong> <code>{details['agent_id']}</code><br>
+            <strong>Workspace ID:</strong> <code>{details['workspace_id']}</code>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with col2:
+            st.markdown("### Customization")
+            custom_greeting = st.text_input("Custom greeting (optional)",
+                                            placeholder=f"Hi! I'm {details['agent_name']}. How can I help?")
+
+        st.markdown("---")
+        st.markdown("### 📋 Floating Widget Embed Code")
+
+        # Check for API key passed via URL parameter
+        query_params = st.query_params
+        prefilled_api_key = query_params.get("api_key", None)
+
+        if not prefilled_api_key:
+            st.warning("⚠️ Floating widget requires an API key. Generate one in the API Keys page first.")
+        else:
+            st.success("✅ API key pre-filled! You can copy the complete embed code below.")
+
+        # Determine API base URL - use production URL for widget embeds
+        api_base_url = os.getenv("API_BASE_URL", "https://botapi.kobra-dataworks.de")
+
+        # Fetch API keys for the workspace
+        keys_result = api_request("GET", f"/workspaces/{details['workspace_id']}/api-keys")
+
+        if keys_result.get("success") and keys_result["data"]:
+            active_keys = [k for k in keys_result["data"] if k.get('is_active')]
+
+            if active_keys:
+                key_options = {f"{k['name']} ({k['key_prefix']}...)": k['key_prefix'] for k in active_keys}
+                selected_key_label = st.selectbox("Select API Key", list(key_options.keys()))
+
+                # Use prefilled key if available, otherwise show placeholder
+                if prefilled_api_key:
+                    api_key_value = prefilled_api_key
+                    st.info("🔒 Note: Your API key is embedded in the code below. Keep it secure!")
+                else:
+                    api_key_value = 'YOUR_API_KEY_HERE'
+                    st.info("🔒 Note: Replace 'YOUR_API_KEY_HERE' with your actual API key. The key is only shown once at creation time.")
+
+                floating_code = f"""<!-- {details['agent_name']} Floating Chat Widget -->
+<script>
+  window.IHNEN_CHAT_CONFIG = {{
+    apiKey: '{api_key_value}',{' // ✅ Pre-filled' if prefilled_api_key else ' // Replace with actual API key'}
+    workspaceId: '{details['workspace_id']}',
+    agentId: '{details['agent_id']}',
+    agentName: '{details['agent_name']}',
+    greeting: '{custom_greeting or f"Hi! I'm {details['agent_name']}. How can I help?"}',
+    position: 'bottom-right',
+    theme: 'light'
+  }};
+</script>
+<script src="{api_base_url}/static/chat-widget-secure.js"></script>"""
+
+                st.code(floating_code, language="html")
+
+                with st.expander("📖 Usage Instructions"):
+                    st.markdown("""
+                    **How to use this floating widget:**
+                    1. Generate an API key in the **🔑 API Keys** page
+                    2. Replace `YOUR_API_KEY_HERE` with your actual API key
+                    3. Paste the code before the closing `</body>` tag of your website
+                    4. A floating chat button will appear in the bottom right corner
+                    5. Users can click to open/close the chat
+
+                    **Security:**
+                    - Keep your API key private
+                    - Use domain restrictions if available
+                    - Monitor usage in the dashboard
+                    - Rotate keys regularly
+                    """)
+
+                st.markdown("---")
+                st.markdown("### 🔑 Need an API Key?")
+                if st.button("→ Go to API Keys Page"):
+                    st.info("Navigate to '🔑 API Keys' in the sidebar to generate a key")
+            else:
+                st.warning("No active API keys found for this workspace.")
+                st.info("Create an API key in the **🔑 API Keys** page to use the floating widget.")
+        else:
+            st.error("Could not fetch API keys. Please check the workspace configuration.")
+
+        st.markdown("---")
+        st.markdown("### 🎨 Preview")
+
+        # Show a mockup preview of the floating widget
+        st.markdown("""
+        <div style="position: relative; width: 100%; height: 400px; border: 2px solid #ddd;
+             border-radius: 8px; background: #f5f5f5; overflow: hidden;">
+            <div style="position: absolute; bottom: 20px; right: 20px; width: 60px; height: 60px;
+                 border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                 box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: flex; align-items: center;
+                 justify-content: center; color: white; font-size: 24px; cursor: pointer;">
+                💬
+            </div>
+            <div style="position: absolute; bottom: 90px; right: 20px; background: white;
+                 border-radius: 8px; padding: 12px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+                 max-width: 200px;">
+                <p style="margin: 0; font-size: 14px; color: #333;">
+                Chat with us! 👋
+                </p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("---")
+        st.markdown("### ⚙️ Advanced Configuration")
+
+        with st.expander("🎨 Theming & Styling"):
+            st.markdown("""
+            **Custom CSS:**
+            You can customize the widget appearance by adding CSS to your page:
+
+            ```css
+            /* Customize widget colors */
+            .chat-widget {
+                --primary-color: #667eea;
+                --text-color: #333;
+                --bg-color: #ffffff;
+            }
+            ```
+
+            **Available Options:**
+            - Primary color
+            - Background color
+            - Font family
+            - Border radius
+            - Shadow effects
+            """)
+
+        with st.expander("🔧 JavaScript API"):
+            st.markdown(f"""
+            **Control the widget programmatically:**
+
+            ```javascript
+            // Open the chat widget
+            window.IhnenChat.open();
+
+            // Close the chat widget
+            window.IhnenChat.close();
+
+            // Send a message programmatically
+            window.IhnenChat.sendMessage("Hello!");
+
+            // Listen for events
+            window.IhnenChat.on('message', function(data) {{
+                console.log('New message:', data);
+            }});
+            ```
+            """)
+
+        with st.expander("🌐 Multiple Agents"):
+            st.markdown("""
+            **Need multiple agents on one page?**
+
+            You can embed multiple chat widgets by:
+            1. Using different iframe containers
+            2. Assigning unique IDs to each widget
+            3. Specifying different agent IDs
+
+            Example:
+            ```html
+            <div id="support-agent">
+                <!-- Support agent iframe -->
+            </div>
+
+            <div id="sales-agent">
+                <!-- Sales agent iframe -->
+            </div>
+            ```
+            """)
+
+    else:
+        st.warning("No active agents found. Create an agent first to generate embed codes.")
+        st.markdown("""
+        ### Getting Started
+        1. **Create an Organization** in the Organizations page
+        2. **Create a Workspace** under your organization
+        3. **Create an Agent** with your desired configuration
+        4. **Generate an API Key** (for floating widgets)
+        5. Come back here to generate your embed code!
+        """)
 
 
 # ==========================================
