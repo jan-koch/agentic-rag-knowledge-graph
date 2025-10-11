@@ -292,7 +292,13 @@ def security_headers_middleware(request: Request, call_next):
         if request.url.path.startswith("/widget/"):
             # Allow widget chat to be embedded in any iframe (needed for chat widget)
             response.headers["X-Frame-Options"] = "ALLOWALL"
-            response.headers["Content-Security-Policy"] = "default-src 'self' 'unsafe-inline' 'unsafe-eval'; frame-ancestors *;"
+            # Allow CDN resources for markdown rendering and syntax highlighting
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
+                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "frame-ancestors *;"
+            )
         else:
             # Deny iframe embedding for all other endpoints
             response.headers["X-Frame-Options"] = "DENY"
