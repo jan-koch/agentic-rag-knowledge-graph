@@ -197,7 +197,7 @@ CREATE TRIGGER update_sessions_updated_at BEFORE UPDATE ON sessions
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE OR REPLACE VIEW document_summaries AS
-SELECT 
+SELECT
     d.id,
     d.title,
     d.source,
@@ -210,3 +210,33 @@ SELECT
 FROM documents d
 LEFT JOIN chunks c ON d.id = c.document_id
 GROUP BY d.id, d.title, d.source, d.created_at, d.updated_at, d.metadata;
+
+-- ==========================================
+-- TRIGGERS FOR AUTOMATIC COUNTERS
+-- ==========================================
+
+-- Function to automatically update workspace document count
+CREATE OR REPLACE FUNCTION update_workspace_document_count()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        UPDATE workspaces
+        SET document_count = document_count + 1
+        WHERE id = NEW.workspace_id;
+        RETURN NEW;
+    ELSIF TG_OP = 'DELETE' THEN
+        UPDATE workspaces
+        SET document_count = GREATEST(0, document_count - 1)
+        WHERE id = OLD.workspace_id;
+        RETURN OLD;
+    END IF;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger to update document count when documents are added/removed
+DROP TRIGGER IF EXISTS update_document_count_trigger ON documents;
+CREATE TRIGGER update_document_count_trigger
+    AFTER INSERT OR DELETE ON documents
+    FOR EACH ROW
+    EXECUTE FUNCTION update_workspace_document_count();

@@ -6,13 +6,14 @@ import os
 import asyncio
 import json
 import logging
+import hashlib
 from contextlib import asynccontextmanager
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import uuid
 
 from fastapi import FastAPI, HTTPException, Request, Depends
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 import uvicorn
@@ -142,15 +143,13 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure CORS based on environment
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",") if os.getenv("ALLOWED_ORIGINS") != "*" else ["*"]
-
+# Configure CORS - allow all origins since API key provides security
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-N8N-Signature", "User-Agent"]
+    allow_origins=["*"],
+    allow_credentials=False,  # Must be False when allow_origins is ["*"]
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"]  # Allow all headers including Authorization
 )
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
@@ -173,10 +172,11 @@ async def get_or_create_session(request: ChatRequest) -> str:
         session = await get_session(request.session_id)
         if session:
             return request.session_id
-    
-    # Create new session
+
+    # Create new session with workspace_id if provided
     return await create_session(
         user_id=request.user_id,
+        workspace_id=request.workspace_id,
         metadata=request.metadata
     )
 
@@ -317,30 +317,56 @@ async def execute_agent(
     message: str,
     session_id: str,
     user_id: Optional[str] = None,
+    workspace_id: Optional[str] = None,
     save_conversation: bool = True
 ) -> tuple[str, List[ToolCall]]:
     """
     Execute the agent with a message.
-    
+
     Args:
         message: User message
         session_id: Session ID
         user_id: Optional user ID
+        workspace_id: Optional workspace ID
         save_conversation: Whether to save the conversation
-    
+
     Returns:
         Tuple of (agent response, tools used)
     """
     try:
+        # Get workspace_id from session if not provided
+        if not workspace_id:
+            from .db_utils import db_pool
+            async with db_pool.acquire() as conn:
+                workspace_id = await conn.fetchval(
+                    "SELECT workspace_id::text FROM sessions WHERE id = $1::uuid",
+                    session_id
+                )
+
+        # Fetch workspace details for context
+        workspace_name = None
+        workspace_description = None
+        if workspace_id:
+            from .db_utils import get_workspace
+            workspace = await get_workspace(workspace_id)
+            if workspace:
+                workspace_name = workspace.get('name')
+                workspace_description = workspace.get('description')
+                logger.info(f"Using workspace context: {workspace_name} (ID: {workspace_id})")
+
+        # Generate workspace-aware system prompt
+        from .prompts import get_workspace_prompt
+        dynamic_system_prompt = get_workspace_prompt(workspace_name, workspace_description)
+
         # Create dependencies
         deps = AgentDependencies(
             session_id=session_id,
-            user_id=user_id
+            workspace_id=workspace_id
         )
-        
+
         # Get conversation context
         context = await get_conversation_context(session_id)
-        
+
         # Build prompt with context
         full_prompt = message
         if context:
@@ -349,9 +375,9 @@ async def execute_agent(
                 for msg in context[-6:]  # Last 3 turns
             ])
             full_prompt = f"Previous conversation:\n{context_str}\n\nCurrent question: {message}"
-        
-        # Run the agent
-        result = await rag_agent.run(full_prompt, deps=deps)
+
+        # Run the agent with dynamic system prompt
+        result = await rag_agent.run(full_prompt, deps=deps, system_prompt=dynamic_system_prompt)
         
         response = result.data
         tools_used = extract_tool_calls(result)
@@ -427,7 +453,8 @@ async def chat(request: ChatRequest, api_key: str = Depends(verify_api_key)):
         response, tools_used = await execute_agent(
             message=request.message,
             session_id=session_id,
-            user_id=request.user_id
+            user_id=request.user_id,
+            workspace_id=request.workspace_id
         )
         
         return ChatResponse(
@@ -453,16 +480,42 @@ async def chat_stream(request: ChatRequest, api_key: str = Depends(verify_api_ke
             """Generate streaming response using agent.iter() pattern."""
             try:
                 yield f"data: {json.dumps({'type': 'session', 'session_id': session_id})}\n\n"
-                
+
+                # Get workspace_id from session or request
+                workspace_id = request.workspace_id
+                if not workspace_id:
+                    from .db_utils import db_pool
+                    async with db_pool.acquire() as conn:
+                        workspace_id = await conn.fetchval(
+                            "SELECT workspace_id::text FROM sessions WHERE id = $1::uuid",
+                            session_id
+                        )
+
+                # Fetch workspace details for context
+                workspace_name = None
+                workspace_description = None
+                if workspace_id:
+                    from .db_utils import get_workspace
+                    workspace = await get_workspace(workspace_id)
+                    if workspace:
+                        workspace_name = workspace.get('name')
+                        workspace_description = workspace.get('description')
+                        logger.info(f"Streaming with workspace context: {workspace_name} (ID: {workspace_id})")
+
+                # Generate workspace-aware system prompt
+                from .prompts import get_workspace_prompt
+                dynamic_system_prompt = get_workspace_prompt(workspace_name, workspace_description)
+
                 # Create dependencies
                 deps = AgentDependencies(
                     session_id=session_id,
+                    workspace_id=workspace_id,
                     user_id=request.user_id
                 )
-                
+
                 # Get conversation context
                 context = await get_conversation_context(session_id)
-                
+
                 # Build input with context
                 full_prompt = request.message
                 if context:
@@ -471,7 +524,7 @@ async def chat_stream(request: ChatRequest, api_key: str = Depends(verify_api_ke
                         for msg in context[-6:]
                     ])
                     full_prompt = f"Previous conversation:\n{context_str}\n\nCurrent question: {request.message}"
-                
+
                 # Save user message immediately
                 await add_message(
                     session_id=session_id,
@@ -479,11 +532,11 @@ async def chat_stream(request: ChatRequest, api_key: str = Depends(verify_api_ke
                     content=request.message,
                     metadata={"user_id": request.user_id}
                 )
-                
+
                 full_response = ""
-                
-                # Stream using agent.iter() pattern
-                async with rag_agent.iter(full_prompt, deps=deps) as run:
+
+                # Stream using agent.iter() pattern with dynamic system prompt
+                async with rag_agent.iter(full_prompt, deps=deps, system_prompt=dynamic_system_prompt) as run:
                     async for node in run:
                         if rag_agent.is_model_request_node(node):
                             # Stream tokens from the model
@@ -663,13 +716,53 @@ async def get_session_info(session_id: str, api_key: str = Depends(verify_api_ke
         session = await get_session(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
-        
+
         return session
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Session retrieval failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/sessions/{session_id}/messages")
+async def get_session_messages_endpoint(
+    session_id: str,
+    limit: int = 50,
+    api_key: str = Depends(verify_api_key)
+):
+    """
+    Get message history for a session.
+
+    Args:
+        session_id: Session UUID
+        limit: Maximum number of messages to return (default 50)
+
+    Returns:
+        List of messages ordered by creation time
+    """
+    try:
+        # Validate session exists and is not expired
+        session = await get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found or expired")
+
+        # Get messages using existing function
+        messages = await get_session_messages(session_id, limit=limit)
+
+        logger.info(f"Retrieved {len(messages)} messages for session {session_id}")
+
+        return {
+            "session_id": session_id,
+            "messages": messages,
+            "total": len(messages)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get session messages: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1083,6 +1176,151 @@ async def global_exception_handler(request: Request, exc: Exception):
         error_type=type(exc).__name__,
         request_id=str(uuid.uuid4())
     )
+
+
+# ====================
+# Chat Widget Endpoint
+# ====================
+
+@app.get("/widget/chat")
+async def get_chat_widget():
+    """
+    Serve the embeddable chat widget HTML.
+
+    Usage: Embed in your app using an iframe:
+    <iframe
+        src="http://your-api-url/widget/chat?workspace_id=xxx&agent_id=yyy&agent_name=Support"
+        width="100%"
+        height="600px"
+        frameborder="0">
+    </iframe>
+    """
+    widget_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "chat-widget.html")
+    return FileResponse(widget_path, media_type="text/html")
+
+
+@app.get("/static/chat-widget.js")
+async def get_chat_widget_js():
+    """
+    Serve the chat widget JavaScript file.
+
+    Usage: Add this script tag to any HTML page:
+    <script src="https://botapi.kobra-dataworks.de/static/chat-widget.js"></script>
+    """
+    js_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "chat-widget.js")
+    response = FileResponse(js_path, media_type="application/javascript")
+    # Prevent caching to ensure users always get latest version
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
+
+@app.get("/static/chat-widget-secure.js")
+async def get_chat_widget_secure_js():
+    """
+    Serve the secure chat widget JavaScript file with API key authentication.
+
+    Usage:
+    <script>
+      window.RAG_CHAT_CONFIG = { apiKey: 'your-api-key' };
+    </script>
+    <script src="https://botapi.kobra-dataworks.de/static/chat-widget-secure.js"></script>
+    """
+    js_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "chat-widget-secure.js")
+    response = FileResponse(js_path, media_type="application/javascript")
+    # Prevent caching to ensure users always get latest version
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
+
+@app.post("/v1/widget/validate")
+async def validate_widget_api_key(request: Request):
+    """
+    Validate API key and return workspace/agent configuration.
+
+    Returns workspace_id, agent_id, agent_name, and subscription status.
+    """
+    try:
+        # Get API key from Authorization header
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(401, "Missing or invalid Authorization header")
+
+        api_key = auth_header.replace("Bearer ", "")
+
+        # Get API key info from database
+        from .db_utils import db_pool
+
+        async with db_pool.acquire() as conn:
+            # Get API key details
+            key_row = await conn.fetchrow(
+                """
+                SELECT ak.*, w.organization_id
+                FROM api_keys ak
+                JOIN workspaces w ON ak.workspace_id = w.id
+                WHERE ak.key_hash = $1 AND ak.is_active = true
+                  AND (ak.expires_at IS NULL OR ak.expires_at > NOW())
+                """,
+                hashlib.sha256(api_key.encode()).hexdigest()
+            )
+
+            if not key_row:
+                raise HTTPException(401, "Invalid or expired API key")
+
+            workspace_id = str(key_row["workspace_id"])
+            org_id = str(key_row["organization_id"])
+
+            # Get organization to check subscription
+            org_row = await conn.fetchrow(
+                "SELECT plan_tier FROM organizations WHERE id = $1::uuid",
+                org_id
+            )
+
+            if not org_row:
+                raise HTTPException(404, "Organization not found")
+
+            # Check if subscription is active (for now, free tier and above are active)
+            subscription_active = org_row["plan_tier"] in ["free", "starter", "pro", "enterprise"]
+
+            # Get default agent for workspace
+            agent_row = await conn.fetchrow(
+                """
+                SELECT id, name FROM agents
+                WHERE workspace_id = $1::uuid AND is_active = true
+                ORDER BY created_at ASC
+                LIMIT 1
+                """,
+                workspace_id
+            )
+
+            if not agent_row:
+                raise HTTPException(404, "No active agent found for workspace")
+
+            agent_id = str(agent_row["id"])
+            agent_name = agent_row["name"]
+
+            # Update last_used_at for API key
+            await conn.execute(
+                "UPDATE api_keys SET last_used_at = NOW() WHERE id = $1::uuid",
+                key_row["id"]
+            )
+
+            return {
+                "workspace_id": workspace_id,
+                "agent_id": agent_id,
+                "agent_name": agent_name,
+                "subscription_active": subscription_active,
+                "plan_tier": org_row["plan_tier"]
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Widget validation error: {e}")
+        raise HTTPException(500, f"Validation failed: {str(e)}")
 
 
 # Development server

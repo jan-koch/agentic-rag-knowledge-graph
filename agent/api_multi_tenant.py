@@ -120,6 +120,14 @@ async def get_organization_endpoint(org_id: str):
     return Organization(**org)
 
 
+@router.get("/organizations", response_model=List[Organization])
+async def list_organizations_endpoint():
+    """List all organizations."""
+    from .db_utils import list_organizations
+    orgs = await list_organizations()
+    return [Organization(**org) for org in orgs]
+
+
 # ====================
 # Workspace Endpoints
 # ====================
@@ -367,9 +375,12 @@ async def list_api_keys_endpoint(workspace_id: str):
     if not workspace:
         raise HTTPException(404, "Workspace not found")
 
-    # TODO: Implement list_api_keys in db_utils
-    # For now, return empty list
-    return []
+    # Import list_api_keys function
+    from .db_utils import list_api_keys
+
+    # Get all API keys for the workspace
+    api_keys = await list_api_keys(workspace_id)
+    return [APIKey(**key) for key in api_keys]
 
 
 @router.delete("/workspaces/{workspace_id}/api-keys/{key_id}")
@@ -384,6 +395,155 @@ async def revoke_api_key_endpoint(
         raise HTTPException(404, "API key not found")
 
     return {"status": "success", "message": "API key revoked"}
+
+
+# ====================
+# Document Management Endpoints
+# ====================
+
+@router.get("/workspaces/{workspace_id}/documents")
+async def list_documents_endpoint(
+    workspace_id: str,
+    limit: int = 100,
+    offset: int = 0
+):
+    """List all documents in a workspace."""
+    # Verify workspace exists
+    workspace = await get_workspace(workspace_id)
+    if not workspace:
+        raise HTTPException(404, "Workspace not found")
+
+    from .db_utils import db_pool
+
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT
+                id::text,
+                title,
+                source,
+                metadata,
+                created_at,
+                updated_at
+            FROM documents
+            WHERE workspace_id = $1::uuid
+            ORDER BY created_at DESC
+            LIMIT $2 OFFSET $3
+            """,
+            workspace_id,
+            limit,
+            offset
+        )
+
+        documents = [dict(row) for row in rows]
+
+        # Get total count
+        total = await conn.fetchval(
+            "SELECT COUNT(*) FROM documents WHERE workspace_id = $1::uuid",
+            workspace_id
+        )
+
+        return {
+            "documents": documents,
+            "total": total,
+            "limit": limit,
+            "offset": offset
+        }
+
+
+@router.get("/workspaces/{workspace_id}/documents/{document_id}")
+async def get_document_endpoint(
+    workspace_id: str,
+    document_id: str
+):
+    """Get a specific document by ID."""
+    # Verify workspace exists
+    workspace = await get_workspace(workspace_id)
+    if not workspace:
+        raise HTTPException(404, "Workspace not found")
+
+    from .db_utils import db_pool
+
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT
+                id::text,
+                title,
+                source,
+                content,
+                metadata,
+                created_at,
+                updated_at
+            FROM documents
+            WHERE id = $1::uuid AND workspace_id = $2::uuid
+            """,
+            document_id,
+            workspace_id
+        )
+
+        if not row:
+            raise HTTPException(404, "Document not found")
+
+        return dict(row)
+
+
+@router.delete("/workspaces/{workspace_id}/documents/{document_id}")
+async def delete_document_endpoint(
+    workspace_id: str,
+    document_id: str
+):
+    """
+    Delete a document and all its associated chunks.
+
+    This will also automatically update the workspace document count via trigger.
+    """
+    # Verify workspace exists
+    workspace = await get_workspace(workspace_id)
+    if not workspace:
+        raise HTTPException(404, "Workspace not found")
+
+    from .db_utils import db_pool
+
+    async with db_pool.acquire() as conn:
+        # Verify document exists and belongs to workspace
+        doc = await conn.fetchrow(
+            "SELECT id FROM documents WHERE id = $1::uuid AND workspace_id = $2::uuid",
+            document_id,
+            workspace_id
+        )
+
+        if not doc:
+            raise HTTPException(404, "Document not found in this workspace")
+
+        # Count chunks before deletion
+        chunks_count = await conn.fetchval(
+            "SELECT COUNT(*) FROM chunks WHERE document_id = $1::uuid",
+            document_id
+        )
+
+        # Delete chunks first (foreign key constraint)
+        await conn.execute(
+            "DELETE FROM chunks WHERE document_id = $1::uuid",
+            document_id
+        )
+
+        # Delete document (trigger will update workspace document_count)
+        await conn.execute(
+            "DELETE FROM documents WHERE id = $1::uuid",
+            document_id
+        )
+
+        chunks_deleted = chunks_count
+
+        logger.info(f"Deleted document {document_id} and {chunks_deleted} chunks from workspace {workspace_id}")
+
+        return {
+            "status": "success",
+            "message": "Document deleted",
+            "document_id": document_id,
+            "chunks_deleted": chunks_deleted or 0
+        }
 
 
 # ====================

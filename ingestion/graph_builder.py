@@ -32,17 +32,25 @@ logger = logging.getLogger(__name__)
 
 class GraphBuilder:
     """Builds knowledge graph from document chunks."""
-    
-    def __init__(self):
-        """Initialize graph builder."""
-        self.graph_client = GraphitiClient()
+
+    def __init__(self, workspace_id: Optional[str] = None):
+        """
+        Initialize graph builder.
+
+        Args:
+            workspace_id: Workspace ID for multi-tenant isolation (uses Graphiti group_id)
+        """
+        self.workspace_id = workspace_id
+        self.graph_client = GraphitiClient(group_id=workspace_id)
         self._initialized = False
-    
+        logger.info(f"GraphBuilder initialized with workspace_id: {workspace_id}")
+
     async def initialize(self):
         """Initialize graph client."""
         if not self._initialized:
             await self.graph_client.initialize()
             self._initialized = True
+            logger.info(f"GraphBuilder initialized for workspace: {self.workspace_id}")
     
     async def close(self):
         """Close graph client."""
@@ -400,9 +408,17 @@ class SimpleEntityExtractor:
 
 
 # Factory function
-def create_graph_builder() -> GraphBuilder:
-    """Create graph builder instance."""
-    return GraphBuilder()
+def create_graph_builder(workspace_id: Optional[str] = None) -> GraphBuilder:
+    """
+    Create graph builder instance.
+
+    Args:
+        workspace_id: Workspace ID for multi-tenant isolation
+
+    Returns:
+        GraphBuilder instance
+    """
+    return GraphBuilder(workspace_id=workspace_id)
 
 
 # Example usage

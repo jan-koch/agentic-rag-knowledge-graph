@@ -26,21 +26,25 @@ logger = logging.getLogger(__name__)
 # Help from this PR for setting up the custom clients: https://github.com/getzep/graphiti/pull/601/files
 class GraphitiClient:
     """Manages Graphiti knowledge graph operations."""
-    
+
     def __init__(
         self,
         neo4j_uri: Optional[str] = None,
         neo4j_user: Optional[str] = None,
-        neo4j_password: Optional[str] = None
+        neo4j_password: Optional[str] = None,
+        group_id: Optional[str] = None
     ):
         """
         Initialize Graphiti client.
-        
+
         Args:
             neo4j_uri: Neo4j connection URI
             neo4j_user: Neo4j username
             neo4j_password: Neo4j password
+            group_id: Group ID for workspace isolation (uses workspace_id)
         """
+        # Workspace isolation
+        self.group_id = group_id
         # Neo4j configuration
         self.neo4j_uri = neo4j_uri or os.getenv("NEO4J_URI", "bolt://localhost:7687")
         self.neo4j_user = neo4j_user or os.getenv("NEO4J_USER", "neo4j")
@@ -97,6 +101,7 @@ class GraphitiClient:
             )
             
             # Initialize Graphiti with custom clients
+            # Note: group_id is passed to add_episode(), not to Graphiti constructor
             self.graphiti = Graphiti(
                 self.neo4j_uri,
                 self.neo4j_user,
@@ -155,7 +160,8 @@ class GraphitiClient:
             episode_body=content,
             source=EpisodeType.text,  # Always use text type for our content
             source_description=source,
-            reference_time=episode_timestamp
+            reference_time=episode_timestamp,
+            group_id=self.group_id  # Workspace isolation via group_id
         )
         
         logger.info(f"Added episode {episode_id} to knowledge graph")
@@ -181,9 +187,10 @@ class GraphitiClient:
             await self.initialize()
         
         try:
-            # Use Graphiti's search method (simplified parameters)
-            results = await self.graphiti.search(query)
-            
+            # Use Graphiti's search method with group_id filtering for workspace isolation
+            group_ids = [self.group_id] if self.group_id else None
+            results = await self.graphiti.search(query, group_ids=group_ids)
+
             # Convert results to dictionaries
             return [
                 {
@@ -349,22 +356,59 @@ class GraphitiClient:
                 cross_encoder=OpenAIRerankerClient(client=llm_client, config=llm_config)
             )
             await self.graphiti.build_indices_and_constraints()
-            
+
             logger.warning("Reinitialized Graphiti client (fresh indices created)")
 
 
-# Global Graphiti client instance
+# Global Graphiti client instance (for backwards compatibility)
 graph_client = GraphitiClient()
+
+# Workspace-specific client cache for multi-tenant isolation
+_workspace_graph_clients: Dict[str, GraphitiClient] = {}
+
+
+async def get_workspace_graph_client(workspace_id: str) -> GraphitiClient:
+    """
+    Get or create a workspace-specific Graphiti client.
+
+    Each workspace gets its own Graphiti client with a unique group_id,
+    ensuring complete isolation of knowledge graphs between workspaces.
+
+    Args:
+        workspace_id: Workspace UUID
+
+    Returns:
+        Workspace-specific GraphitiClient instance
+    """
+    if not workspace_id:
+        logger.warning("No workspace_id provided, using global client")
+        return graph_client
+
+    if workspace_id not in _workspace_graph_clients:
+        logger.info(f"Creating new Graphiti client for workspace: {workspace_id}")
+        client = GraphitiClient(group_id=workspace_id)
+        await client.initialize()
+        _workspace_graph_clients[workspace_id] = client
+
+    return _workspace_graph_clients[workspace_id]
 
 
 async def initialize_graph():
-    """Initialize graph client."""
+    """Initialize global graph client (for backwards compatibility)."""
     await graph_client.initialize()
 
 
 async def close_graph():
-    """Close graph client."""
+    """Close all graph clients (global and workspace-specific)."""
+    # Close global client
     await graph_client.close()
+
+    # Close all workspace-specific clients
+    for workspace_id, client in _workspace_graph_clients.items():
+        logger.info(f"Closing Graphiti client for workspace: {workspace_id}")
+        await client.close()
+
+    _workspace_graph_clients.clear()
 
 
 # Convenience functions for common operations

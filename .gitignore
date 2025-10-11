@@ -186,6 +186,13 @@ docker-compose.override.yml
 # Test output
 test-results/
 test-reports/
+.pytest_cache/
+*.pytest_cache
+
+# CI/CD artifacts
+.github/workflows/*.log
+trivy-results.sarif
+sarif-results/
 
 # Neo4j
 neo4j/

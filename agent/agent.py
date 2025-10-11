@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pydantic_ai import Agent, RunContext
 from dotenv import load_dotenv
 
-from .prompts import SYSTEM_PROMPT
+from .prompts import SYSTEM_PROMPT, get_workspace_prompt
 from .providers import get_llm_model
 from .tools import (
     vector_search_tool,
@@ -39,9 +39,10 @@ logger = logging.getLogger(__name__)
 class AgentDependencies:
     """Dependencies for the agent."""
     session_id: str
+    workspace_id: Optional[str] = None
     user_id: Optional[str] = None
     search_preferences: Dict[str, Any] = None
-    
+
     def __post_init__(self):
         if self.search_preferences is None:
             self.search_preferences = {
@@ -82,6 +83,7 @@ async def vector_search(
     """
     input_data = VectorSearchInput(
         query=query,
+        workspace_id=ctx.deps.workspace_id,
         limit=limit
     )
     
@@ -118,7 +120,10 @@ async def graph_search(
     Returns:
         List of facts with associated episodes and temporal data
     """
-    input_data = GraphSearchInput(query=query)
+    input_data = GraphSearchInput(
+        query=query,
+        workspace_id=ctx.deps.workspace_id
+    )
     
     results = await graph_search_tool(input_data)
     
@@ -159,6 +164,7 @@ async def hybrid_search(
     """
     input_data = HybridSearchInput(
         query=query,
+        workspace_id=ctx.deps.workspace_id,
         limit=limit,
         text_weight=text_weight
     )

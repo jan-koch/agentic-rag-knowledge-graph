@@ -18,10 +18,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Remove volumes/reset**: `docker compose down -v` (⚠️ destroys all data)
 
 ### Running the System
-- **Document ingestion**: `python -m ingestion.ingest` (required first step)
+- **Document ingestion (CLI)**: `python -m ingestion.ingest` (required first step)
+- **Document ingestion (Web UI)**: Use Streamlit dashboard (see below)
+- **Workspace-specific ingestion**: `python ingest_workspace.py --workspace-id <UUID> --directory documents/`
 - **Clean and re-ingest**: `python -m ingestion.ingest --clean`
 - **Start API server**: `python -m agent.api` (defaults to port 8058)
+- **Start Web UI**: `streamlit run webui.py --server.port 8012` (admin dashboard on 127.0.0.1:8012)
 - **CLI interface**: `python cli.py` (connects to API at 127.0.0.1:8058)
+
+### Web UI & Document Ingestion
+- **Admin Dashboard**: `streamlit run webui.py` - Multi-tenant admin interface on port 8012
+- **Ingestion via Web UI**: Navigate to Workspaces page → Expand workspace details → "📤 Ingest Documents"
+  - Browse documents in `/documents` folder
+  - Select workspace for multi-tenant ingestion
+  - View real-time ingestion progress and results
+  - See detailed statistics (chunks, entities, errors)
+- **Features**: Organizations, workspaces, agents, API keys management, chat interface, health monitoring
+- **Documentation**: See `STREAMLIT_INGESTION_GUIDE.md` for detailed ingestion guide
+- **Access**: Deployed at `https://bot.kobra-dataworks.de` via Cloudflare tunnel (maps to localhost:8012)
+
+### Systemd Services (Auto-Start on Boot)
+- **Installation**: `sudo ./install-services.sh` - Sets up both API and Dashboard as system services
+- **Service management**:
+  - Start: `sudo systemctl start rag-api` / `sudo systemctl start rag-dashboard`
+  - Stop: `sudo systemctl stop rag-api` / `sudo systemctl stop rag-dashboard`
+  - Restart: `sudo systemctl restart rag-api` / `sudo systemctl restart rag-dashboard`
+  - Status: `sudo systemctl status rag-api` / `sudo systemctl status rag-dashboard`
+  - Logs: `sudo journalctl -u rag-api -f` / `sudo journalctl -u rag-dashboard -f`
+- **Services**: `rag-api.service` (port 8058), `rag-dashboard.service` (port 8012)
+- **Documentation**: See `SYSTEMD_SERVICES.md` for complete setup guide
 
 ### Testing and Quality
 - **Run all tests**: `pytest` (58 tests, >80% coverage required)
@@ -58,6 +83,14 @@ This is a hybrid RAG system combining vector search with knowledge graphs, built
 - Both use OpenAI-compatible client configuration for consistent API interfaces
 - **Docker Setup**: Automated with `./scripts/docker-setup.sh` - includes health checks and connection verification
 
+**Multi-Tenant Workspace Isolation** (✨ NEW):
+- Complete workspace isolation via Graphiti `group_id` parameter
+- Each workspace has dedicated knowledge graph client with workspace-specific group_id
+- Workspace-aware dynamic system prompts constrain agent to workspace data only
+- Vector search filtered by `workspace_id` in PostgreSQL
+- Graph search isolated via workspace-specific Graphiti clients
+- No data leakage between workspaces - see `MULTI_TENANT_README.md` for details
+
 ## 📁 Key File Locations
 
 - **Agent configuration**: `agent/prompts.py` controls tool selection behavior
@@ -77,6 +110,26 @@ This is a hybrid RAG system combining vector search with knowledge graphs, built
 - **Session management**: Automatic timeout and message limits per session
 - **Input validation**: Pydantic models validate all inputs
 - **Security middleware**: See `agent/security.py` for implementation details
+
+## 💬 Chat Widget Features (✨ NEW)
+
+**Conversation Persistence**:
+- Sessions automatically saved to browser localStorage
+- Conversations restore on widget reopen (60-minute session timeout)
+- "New Chat" button for starting fresh conversations
+- Separate conversation history per workspace/agent combination
+- Endpoint: `GET /sessions/{session_id}/messages` for history retrieval
+
+**Multilingual Support**:
+- English (en) and German (de) translations
+- Configurable via `language` URL parameter
+- Translates: Send button, New Chat button, placeholders, loading messages
+- See `CHAT_WIDGET_INTEGRATION.md` for embedding instructions
+
+**Widget Endpoints**:
+- `/widget/chat` - Embeddable chat widget HTML
+- `/static/chat-widget-secure.js` - Secure widget with API key auth
+- `/v1/widget/validate` - API key validation and workspace config
 
 ## 🔄 Workflow Integration
 

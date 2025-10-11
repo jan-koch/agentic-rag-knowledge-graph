@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Tests
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Data
+data/
+*.db
+*.sqlite
+
+# Logs
+*.log
+logs/
+
+# Session files
+.claude-sessions/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Backup files
+*.backup
+*.BACKUP_DANGEROUS

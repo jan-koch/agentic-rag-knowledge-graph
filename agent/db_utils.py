@@ -83,34 +83,37 @@ async def close_database():
 # Session Management Functions
 async def create_session(
     user_id: Optional[str] = None,
+    workspace_id: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None,
     timeout_minutes: int = 60
 ) -> str:
     """
     Create a new session.
-    
+
     Args:
         user_id: Optional user identifier
+        workspace_id: Optional workspace ID for multi-tenant support
         metadata: Optional session metadata
         timeout_minutes: Session timeout in minutes
-    
+
     Returns:
         Session ID
     """
     async with db_pool.acquire() as conn:
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=timeout_minutes)
-        
+
         result = await conn.fetchrow(
             """
-            INSERT INTO sessions (user_id, metadata, expires_at)
-            VALUES ($1, $2, $3)
+            INSERT INTO sessions (user_id, workspace_id, metadata, expires_at)
+            VALUES ($1, $2::uuid, $3, $4)
             RETURNING id::text
             """,
             user_id,
+            workspace_id,
             json.dumps(metadata or {}),
             expires_at
         )
-        
+
         return result["id"]
 
 
@@ -189,29 +192,36 @@ async def add_message(
 ) -> str:
     """
     Add a message to a session.
-    
+
     Args:
         session_id: Session UUID
         role: Message role (user/assistant/system)
         content: Message content
         metadata: Optional message metadata
-    
+
     Returns:
         Message ID
     """
     async with db_pool.acquire() as conn:
+        # Get workspace_id from session
+        workspace_id = await conn.fetchval(
+            "SELECT workspace_id FROM sessions WHERE id = $1::uuid",
+            session_id
+        )
+
         result = await conn.fetchrow(
             """
-            INSERT INTO messages (session_id, role, content, metadata)
-            VALUES ($1::uuid, $2, $3, $4)
+            INSERT INTO messages (session_id, workspace_id, role, content, metadata)
+            VALUES ($1::uuid, $2::uuid, $3, $4, $5)
             RETURNING id::text
             """,
             session_id,
+            workspace_id,
             role,
             content,
             json.dumps(metadata or {})
         )
-        
+
         return result["id"]
 
 
@@ -581,8 +591,44 @@ async def get_organization(org_id: str) -> Optional[Dict[str, Any]]:
         )
 
         if result:
-            return dict(result)
+            data = dict(result)
+            # Parse JSONB fields
+            if isinstance(data.get('settings'), str):
+                data['settings'] = json.loads(data['settings'])
+            return data
         return None
+
+
+async def list_organizations() -> List[Dict[str, Any]]:
+    """List all organizations."""
+    async with db_pool.acquire() as conn:
+        results = await conn.fetch(
+            """
+            SELECT
+                id::text,
+                name,
+                slug,
+                plan_tier,
+                max_workspaces,
+                max_documents_per_workspace,
+                max_monthly_requests,
+                contact_email,
+                contact_name,
+                settings,
+                created_at,
+                updated_at
+            FROM organizations
+            ORDER BY created_at DESC
+            """
+        )
+        organizations = []
+        for row in results:
+            data = dict(row)
+            # Parse JSONB fields
+            if isinstance(data.get('settings'), str):
+                data['settings'] = json.loads(data['settings'])
+            organizations.append(data)
+        return organizations
 
 
 # Workspace Functions
@@ -652,16 +698,24 @@ async def list_workspaces(organization_id: str) -> List[Dict[str, Any]]:
                 name,
                 slug,
                 description,
+                settings,
                 document_count,
                 monthly_requests,
-                created_at
+                last_request_reset_at,
+                created_at,
+                updated_at
             FROM workspaces
             WHERE organization_id = $1::uuid
             ORDER BY created_at DESC
             """,
             organization_id
         )
-        return [dict(row) for row in results]
+        workspaces = []
+        for row in results:
+            data = dict(row)
+            data["settings"] = json.loads(data.get("settings", "{}"))
+            workspaces.append(data)
+        return workspaces
 
 
 async def increment_workspace_requests(workspace_id: str):
@@ -763,10 +817,17 @@ async def list_agents(workspace_id: str, include_inactive: bool = False) -> List
                 name,
                 slug,
                 description,
+                system_prompt,
                 model_provider,
                 model_name,
+                temperature,
+                max_tokens,
+                enabled_tools,
+                tool_config,
                 is_active,
-                created_at
+                settings,
+                created_at,
+                updated_at
             FROM agents
             WHERE workspace_id = $1::uuid
         """
@@ -777,7 +838,14 @@ async def list_agents(workspace_id: str, include_inactive: bool = False) -> List
         query += " ORDER BY created_at DESC"
 
         results = await conn.fetch(query, workspace_id)
-        return [dict(row) for row in results]
+        agents = []
+        for row in results:
+            data = dict(row)
+            data["enabled_tools"] = json.loads(data.get("enabled_tools", "[]"))
+            data["tool_config"] = json.loads(data.get("tool_config", "{}"))
+            data["settings"] = json.loads(data.get("settings", "{}"))
+            agents.append(data)
+        return agents
 
 
 async def update_agent(
@@ -917,3 +985,35 @@ async def revoke_api_key(api_key_id: str) -> bool:
             api_key_id
         )
         return result != "UPDATE 0"
+
+
+async def list_api_keys(workspace_id: str) -> List[Dict[str, Any]]:
+    """List all API keys for a workspace."""
+    async with db_pool.acquire() as conn:
+        results = await conn.fetch(
+            """
+            SELECT
+                id::text,
+                workspace_id::text,
+                name,
+                key_prefix,
+                scopes,
+                rate_limit_per_minute,
+                is_active,
+                last_used_at,
+                expires_at,
+                created_at,
+                revoked_at
+            FROM api_keys
+            WHERE workspace_id = $1::uuid
+            ORDER BY created_at DESC
+            """,
+            workspace_id
+        )
+
+        api_keys = []
+        for row in results:
+            data = dict(row)
+            data["scopes"] = json.loads(data.get("scopes", "[]"))
+            api_keys.append(data)
+        return api_keys
