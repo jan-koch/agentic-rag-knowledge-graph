@@ -174,6 +174,71 @@ For a floating chat button in the corner of your page:
 | `agent_id` | Yes | UUID of the agent | `6ba7b810-9dad-11d1-80b4-00c04fd430c8` |
 | `agent_name` | No | Display name for the agent | `Support Bot` |
 | `api_url` | No | Override API URL (defaults to localhost:8058) | `https://api.example.com` |
+| `language` | No | UI language (en or de) | `de` for German, `en` for English (default) |
+| `greeting` | No | Custom greeting message | `Hello! How can I help?` |
+
+## ✨ New Features
+
+### Conversation Persistence
+
+The chat widget now **automatically saves conversation history** to the browser's localStorage:
+
+**How it Works**:
+- Session ID stored per workspace/agent combination
+- Conversations automatically restore on widget reopen
+- 60-minute session timeout (configurable on backend)
+- "New Chat" button in header to start fresh conversations
+
+**User Experience**:
+1. User chats with widget → Session ID saved to localStorage
+2. User closes widget/tab/browser → Session persists
+3. User returns later → Full conversation history restored
+4. After 60 minutes → Session expires, fresh greeting shown
+
+**Technical Details**:
+- Storage key format: `rag_chat_session_{workspace_id}_{agent_id}`
+- Separate histories for different workspaces/agents
+- Graceful fallback if localStorage unavailable
+- Backend endpoint: `GET /sessions/{session_id}/messages`
+
+**Privacy & Security**:
+- Only session UUID stored (not message content)
+- Shared devices: Use "New Chat" button to clear
+- Private browsing: Graceful degradation (no persistence)
+- Workspace isolation maintained
+
+### Multilingual Support
+
+The widget supports **multiple languages** via the `language` parameter:
+
+**Supported Languages**:
+- `en` - English (default)
+- `de` - German (Deutsch)
+
+**Translated Elements**:
+- Send button: "Send" / "Senden"
+- New Chat button: "New Chat" / "Neuer Chat"
+- Input placeholder: "Type your message..." / "Geben Sie Ihre Nachricht ein..."
+- Loading messages: "Restoring conversation..." / "Konversation wird wiederhergestellt..."
+- Confirmation dialogs
+
+**Example (German Widget)**:
+```html
+<iframe
+    src="http://localhost:8058/widget/chat?workspace_id=YOUR_ID&agent_id=YOUR_ID&language=de"
+    width="400px"
+    height="600px">
+</iframe>
+```
+
+**Laravel Integration with Language**:
+```blade
+<x-chat-widget
+    :workspace-id="$workspaceId"
+    :agent-id="$agentId"
+    language="de"
+    agent-name="Kundensupport" />
+```
 
 ## Production Deployment
 

@@ -83,6 +83,14 @@ This is a hybrid RAG system combining vector search with knowledge graphs, built
 - Both use OpenAI-compatible client configuration for consistent API interfaces
 - **Docker Setup**: Automated with `./scripts/docker-setup.sh` - includes health checks and connection verification
 
+**Multi-Tenant Workspace Isolation** (✨ NEW):
+- Complete workspace isolation via Graphiti `group_id` parameter
+- Each workspace has dedicated knowledge graph client with workspace-specific group_id
+- Workspace-aware dynamic system prompts constrain agent to workspace data only
+- Vector search filtered by `workspace_id` in PostgreSQL
+- Graph search isolated via workspace-specific Graphiti clients
+- No data leakage between workspaces - see `MULTI_TENANT_README.md` for details
+
 ## 📁 Key File Locations
 
 - **Agent configuration**: `agent/prompts.py` controls tool selection behavior
@@ -102,6 +110,26 @@ This is a hybrid RAG system combining vector search with knowledge graphs, built
 - **Session management**: Automatic timeout and message limits per session
 - **Input validation**: Pydantic models validate all inputs
 - **Security middleware**: See `agent/security.py` for implementation details
+
+## 💬 Chat Widget Features (✨ NEW)
+
+**Conversation Persistence**:
+- Sessions automatically saved to browser localStorage
+- Conversations restore on widget reopen (60-minute session timeout)
+- "New Chat" button for starting fresh conversations
+- Separate conversation history per workspace/agent combination
+- Endpoint: `GET /sessions/{session_id}/messages` for history retrieval
+
+**Multilingual Support**:
+- English (en) and German (de) translations
+- Configurable via `language` URL parameter
+- Translates: Send button, New Chat button, placeholders, loading messages
+- See `CHAT_WIDGET_INTEGRATION.md` for embedding instructions
+
+**Widget Endpoints**:
+- `/widget/chat` - Embeddable chat widget HTML
+- `/static/chat-widget-secure.js` - Secure widget with API key auth
+- `/v1/widget/validate` - API key validation and workspace config
 
 ## 🔄 Workflow Integration
 

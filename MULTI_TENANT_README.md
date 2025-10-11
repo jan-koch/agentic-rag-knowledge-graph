@@ -319,12 +319,63 @@ curl -X POST http://localhost:8000/v1/workspaces/e5f6g7h8.../chat \
 **Workspace Level:**
 - All documents/chunks filtered by `workspace_id`
 - PostgreSQL functions include workspace parameter
-- Knowledge graph uses unique `group_id` per workspace
+- Knowledge graph uses unique `group_id` per workspace via Graphiti
+- **✨ Complete workspace isolation implemented** (as of 2025-01-11)
 
 **Agent Level:**
 - Agents share workspace knowledge
 - Different system prompts and tool configurations
 - Separate behavior, same data
+
+### ✨ Workspace Isolation Implementation (NEW)
+
+**Complete workspace isolation ensures zero data leakage between workspaces:**
+
+**1. Knowledge Graph Isolation** (`agent/graph_utils.py`):
+- Each workspace has dedicated `GraphitiClient` instance with unique `group_id`
+- Workspace-specific client caching: `get_workspace_graph_client(workspace_id)`
+- Episodes tagged with workspace `group_id` during ingestion
+- Search queries filter by `group_ids` parameter
+- Prevents cross-workspace knowledge graph contamination
+
+**2. Dynamic Workspace-Aware System Prompts** (`agent/prompts.py`):
+- `get_workspace_prompt()` generates workspace-specific prompts
+- Explicitly constrains agent to workspace data only
+- Includes workspace name and description for context
+- Critical instruction: "Do NOT use external information or data from other workspaces"
+
+**3. Agent Tool Filtering** (`agent/tools.py`):
+- `vector_search_tool()` filters by `workspace_id` in PostgreSQL
+- `graph_search_tool()` uses workspace-specific Graphiti clients
+- `hybrid_search_tool()` combines both workspace-filtered approaches
+- All tools receive `workspace_id` via `AgentDependencies`
+
+**4. API Integration** (`agent/api.py`):
+- `execute_agent()` fetches workspace details from database
+- Generates dynamic prompts with workspace context
+- Passes `workspace_id` through `AgentDependencies` to all tools
+- Both streaming and non-streaming endpoints workspace-aware
+
+**Testing Workspace Isolation:**
+```bash
+# Create two workspaces with different documents
+# Workspace A: ClimaNext with climate documents
+# Workspace B: TechCorp with tech documents
+
+# Query Workspace A
+curl -X POST http://localhost:8058/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "What do you know?", "workspace_id": "workspace-a-id"}'
+# Response: Only ClimaNext climate information
+
+# Query Workspace B with same question
+curl -X POST http://localhost:8058/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "What do you know?", "workspace_id": "workspace-b-id"}'
+# Response: Only TechCorp tech information
+
+# Result: Zero data leakage confirmed ✅
+```
 
 ### Database Schema
 
