@@ -186,7 +186,7 @@ sudo ufw status
 RAG_API_URL=https://botapi.kobra-dataworks.de
 RAG_WORKSPACE_ID=518341a0-ae02-4e28-b161-11ea84a392c1
 RAG_AGENT_ID=40ab91a7-a111-48ea-b4cd-f831efeaeff2
-RAG_AGENT_NAME="Ihnen Support Bot"
+RAG_AGENT_NAME="Support Bot"
 ```
 
 ### Test the Integration

@@ -375,9 +375,12 @@ async def list_api_keys_endpoint(workspace_id: str):
     if not workspace:
         raise HTTPException(404, "Workspace not found")
 
-    # TODO: Implement list_api_keys in db_utils
-    # For now, return empty list
-    return []
+    # Import list_api_keys function
+    from .db_utils import list_api_keys
+
+    # Get all API keys for the workspace
+    api_keys = await list_api_keys(workspace_id)
+    return [APIKey(**key) for key in api_keys]
 
 
 @router.delete("/workspaces/{workspace_id}/api-keys/{key_id}")

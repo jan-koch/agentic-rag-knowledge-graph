@@ -75,16 +75,16 @@ If you want to control the widget programmatically:
 
 ```javascript
 // Open the chat
-IhnenChatWidget.open();
+RagChatWidget.open();
 
 // Close the chat
-IhnenChatWidget.close();
+RagChatWidget.close();
 
 // Toggle the chat
-IhnenChatWidget.toggle();
+RagChatWidget.toggle();
 
 // Check if open
-if (IhnenChatWidget.isOpen()) {
+if (RagChatWidget.isOpen()) {
     console.log('Chat is open!');
 }
 ```
@@ -94,7 +94,7 @@ if (IhnenChatWidget.isOpen()) {
 ### Open chat when user clicks a button
 
 ```html
-<button onclick="IhnenChatWidget.open()">Need Help?</button>
+<button onclick="RagChatWidget.open()">Need Help?</button>
 <script src="https://botapi.kobra-dataworks.de/static/chat-widget.js"></script>
 ```
 
@@ -104,7 +104,7 @@ if (IhnenChatWidget.isOpen()) {
 <script src="https://botapi.kobra-dataworks.de/static/chat-widget.js"></script>
 <script>
     setTimeout(() => {
-        IhnenChatWidget.open();
+        RagChatWidget.open();
     }, 5000);
 </script>
 ```
@@ -112,7 +112,7 @@ if (IhnenChatWidget.isOpen()) {
 ### Open chat from a link
 
 ```html
-<a href="#" onclick="IhnenChatWidget.open(); return false;">
+<a href="#" onclick="RagChatWidget.open(); return false;">
     Chat with Support
 </a>
 <script src="https://botapi.kobra-dataworks.de/static/chat-widget.js"></script>
@@ -151,7 +151,7 @@ Once deployed to botapi.kobra-dataworks.de, use:
 
 ## Customization (Advanced)
 
-The default widget is configured for Ihnen Support Bot. If you need to customize:
+The default widget is configured for Support Bot. If you need to customize:
 
 1. Download the widget: `curl https://botapi.kobra-dataworks.de/static/chat-widget.js > custom-widget.js`
 2. Edit the `config` object at the top
@@ -186,4 +186,4 @@ The default widget is configured for Ihnen Support Bot. If you need to customize
 Need help? Contact your developer or check the full documentation in:
 - `CHAT_WIDGET_INTEGRATION.md` - Detailed integration guide
 - `PRODUCTION_SETUP.md` - Server setup and deployment
-- `IHNEN_LARAVEL_INTEGRATION.md` - Laravel-specific guide
+- `LARAVEL_INTEGRATION.md` - Laravel-specific guide

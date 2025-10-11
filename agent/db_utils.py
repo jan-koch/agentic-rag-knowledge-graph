@@ -985,3 +985,35 @@ async def revoke_api_key(api_key_id: str) -> bool:
             api_key_id
         )
         return result != "UPDATE 0"
+
+
+async def list_api_keys(workspace_id: str) -> List[Dict[str, Any]]:
+    """List all API keys for a workspace."""
+    async with db_pool.acquire() as conn:
+        results = await conn.fetch(
+            """
+            SELECT
+                id::text,
+                workspace_id::text,
+                name,
+                key_prefix,
+                scopes,
+                rate_limit_per_minute,
+                is_active,
+                last_used_at,
+                expires_at,
+                created_at,
+                revoked_at
+            FROM api_keys
+            WHERE workspace_id = $1::uuid
+            ORDER BY created_at DESC
+            """,
+            workspace_id
+        )
+
+        api_keys = []
+        for row in results:
+            data = dict(row)
+            data["scopes"] = json.loads(data.get("scopes", "[]"))
+            api_keys.append(data)
+        return api_keys

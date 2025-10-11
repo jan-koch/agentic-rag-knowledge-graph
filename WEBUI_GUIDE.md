@@ -13,12 +13,23 @@ python -m agent.api
 
 # In another terminal, start the Web UI
 source venv/bin/activate
-streamlit run webui.py
+streamlit run webui.py --server.port 8012
 ```
 
-The Web UI will be available at: **http://localhost:8502**
+The Web UI will be available at: **http://localhost:8012**
+
+**Production Access**: https://bot.kobra-dataworks.de (via Cloudflare tunnel)
 
 ### Features
+
+#### 📤 Document Ingestion (NEW!)
+- **Ingest via Web UI**: Navigate to Workspaces page → Show workspace details → "📤 Ingest Documents"
+- **Browse local files**: Automatically finds `.md`, `.markdown`, and `.txt` files in specified folder
+- **Real-time progress**: See ingestion status with progress indicators
+- **Detailed results**: View chunks created, entities extracted, and any errors
+- **Multi-tenant support**: Each workspace has isolated document storage
+- **Clean mode**: Option to remove existing documents before ingesting
+- **Documentation**: See `STREAMLIT_INGESTION_GUIDE.md` for detailed guide
 
 #### 🏢 Organizations Management
 - **Create** new organizations with custom plan tiers
@@ -49,10 +60,10 @@ The Web UI will be available at: **http://localhost:8502**
 - **⚠️ API keys are only shown once at creation!**
 
 #### 💬 Chat Interface
-- Coming soon - will allow testing agents directly in the UI
-- Session management
-- Tool usage tracking
-- Streaming responses
+- **Interactive chat**: Test agents directly in the UI
+- **Session management**: Persistent conversation history
+- **Tool usage tracking**: See which tools the agent uses
+- **Workspace & agent selection**: Choose from available workspaces and agents
 
 #### 📊 Health & Status
 - Real-time system health monitoring
@@ -62,12 +73,13 @@ The Web UI will be available at: **http://localhost:8502**
 ## Navigation
 
 Use the sidebar to navigate between different sections:
-- 🏢 Organizations
-- 📁 Workspaces
-- 🤖 Agents
-- 🔑 API Keys
-- 💬 Chat (coming soon)
-- 📊 Health
+- 📊 Dashboard - System overview and metrics
+- 🏢 Organizations - Create and manage organizations
+- 📁 Workspaces - Manage workspaces and ingest documents
+- 🤖 Agents - Configure AI agents
+- 🔑 API Keys - Generate workspace-scoped API keys
+- 💬 Chat - Interactive chat with agents
+- 🏥 Health - System health and API status
 
 ## Example Workflow
 
@@ -121,36 +133,51 @@ Now you can use the created resources via the REST API or (coming soon) the chat
 
 The Web UI connects to the API at: `http://localhost:8058/v1`
 
-To change this, edit `webui.py` and update the `API_BASE_URL` variable:
+**Note**: Both the API and Web UI run on `localhost` by default. External access is provided via Cloudflare tunnel.
 
-```python
-API_BASE_URL = "http://your-api-host:port/v1"
+### Systemd Services
+
+For production deployments, use systemd services to auto-start on boot:
+
+```bash
+# Install both API and Dashboard services
+sudo ./install-services.sh
+
+# Or manually manage services
+sudo systemctl start rag-api rag-dashboard
+sudo systemctl enable rag-api rag-dashboard
 ```
+
+See `SYSTEMD_SERVICES.md` for complete documentation.
 
 ## Deployment
 
 ### Development
 ```bash
-streamlit run webui.py
+streamlit run webui.py --server.port 8012 --server.address 127.0.0.1
 ```
 
-### Production
+### Production (Systemd)
 ```bash
-streamlit run webui.py --server.port 8502 --server.address 0.0.0.0
+# Install services (recommended)
+sudo ./install-services.sh
+
+# The dashboard runs on 127.0.0.1:8012
+# External access via Cloudflare tunnel: https://bot.kobra-dataworks.de
 ```
 
-For production deployment, consider:
-- Setting up authentication (Streamlit doesn't have built-in auth)
-- Using a reverse proxy (nginx, Apache)
-- Enabling HTTPS
-- Restricting access with firewall rules
+For production deployment:
+- ✅ **Systemd services** provide auto-start and auto-restart
+- ✅ **Cloudflare tunnel** provides secure external access
+- ✅ **Localhost binding** (127.0.0.1) prevents direct external access
+- ✅ **Service logs** available via `journalctl`
 
 ## Troubleshooting
 
 ### Port Already in Use
-If port 8502 is in use, specify a different port:
+If port 8012 is in use, specify a different port:
 ```bash
-streamlit run webui.py --server.port 8503
+streamlit run webui.py --server.port 8013
 ```
 
 ### API Connection Failed
@@ -177,10 +204,11 @@ The Web UI features:
 ## Next Steps
 
 After setting up your resources in the Web UI:
-1. Ingest documents into your workspace
-2. Test the chat functionality (coming soon)
-3. Monitor usage statistics
-4. Create additional agents with different configurations
+1. **Ingest documents**: Use the built-in ingestion feature in Workspaces page
+2. **Test chat**: Use the Chat page to interact with your agents
+3. **Monitor usage**: View statistics on the Dashboard page
+4. **Create agents**: Configure multiple agents with different behaviors
+5. **Generate API keys**: Create keys for programmatic access
 
 ## Support
 
@@ -191,5 +219,6 @@ For issues or questions:
 
 ---
 
-**Version**: 1.0.0
-**Last Updated**: 2025-10-07
+**Version**: 1.1.0
+**Last Updated**: 2025-01-09
+**New Features**: Document ingestion via Web UI, systemd services, chat interface

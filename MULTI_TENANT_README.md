@@ -280,12 +280,23 @@ curl -X POST http://localhost:8000/v1/workspaces/e5f6g7h8.../api-keys \
 
 ### 5. Ingest Documents
 
+**Option A: Command Line**
 ```bash
-# Coming soon: Workspace-aware ingestion
-python -m ingestion.ingest \
+# Workspace-aware ingestion
+python ingest_workspace.py \
   --workspace-id e5f6g7h8... \
   --directory documents/product-docs
 ```
+
+**Option B: Web UI (Recommended)**
+1. Navigate to **📁 Workspaces** page in the Streamlit dashboard
+2. Find your workspace and click "Show details"
+3. Expand **📤 Ingest Documents** section
+4. Browse and select documents to ingest
+5. Click **🚀 Start Ingestion**
+6. View real-time progress and results
+
+See `STREAMLIT_INGESTION_GUIDE.md` for detailed Web UI ingestion guide.
 
 ### 6. Chat with Agent
 

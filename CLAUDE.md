@@ -18,10 +18,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Remove volumes/reset**: `docker compose down -v` (⚠️ destroys all data)
 
 ### Running the System
-- **Document ingestion**: `python -m ingestion.ingest` (required first step)
+- **Document ingestion (CLI)**: `python -m ingestion.ingest` (required first step)
+- **Document ingestion (Web UI)**: Use Streamlit dashboard (see below)
+- **Workspace-specific ingestion**: `python ingest_workspace.py --workspace-id <UUID> --directory documents/`
 - **Clean and re-ingest**: `python -m ingestion.ingest --clean`
 - **Start API server**: `python -m agent.api` (defaults to port 8058)
+- **Start Web UI**: `streamlit run webui.py --server.port 8012` (admin dashboard on 127.0.0.1:8012)
 - **CLI interface**: `python cli.py` (connects to API at 127.0.0.1:8058)
+
+### Web UI & Document Ingestion
+- **Admin Dashboard**: `streamlit run webui.py` - Multi-tenant admin interface on port 8012
+- **Ingestion via Web UI**: Navigate to Workspaces page → Expand workspace details → "📤 Ingest Documents"
+  - Browse documents in `/documents` folder
+  - Select workspace for multi-tenant ingestion
+  - View real-time ingestion progress and results
+  - See detailed statistics (chunks, entities, errors)
+- **Features**: Organizations, workspaces, agents, API keys management, chat interface, health monitoring
+- **Documentation**: See `STREAMLIT_INGESTION_GUIDE.md` for detailed ingestion guide
+- **Access**: Deployed at `https://bot.kobra-dataworks.de` via Cloudflare tunnel (maps to localhost:8012)
+
+### Systemd Services (Auto-Start on Boot)
+- **Installation**: `sudo ./install-services.sh` - Sets up both API and Dashboard as system services
+- **Service management**:
+  - Start: `sudo systemctl start rag-api` / `sudo systemctl start rag-dashboard`
+  - Stop: `sudo systemctl stop rag-api` / `sudo systemctl stop rag-dashboard`
+  - Restart: `sudo systemctl restart rag-api` / `sudo systemctl restart rag-dashboard`
+  - Status: `sudo systemctl status rag-api` / `sudo systemctl status rag-dashboard`
+  - Logs: `sudo journalctl -u rag-api -f` / `sudo journalctl -u rag-dashboard -f`
+- **Services**: `rag-api.service` (port 8058), `rag-dashboard.service` (port 8012)
+- **Documentation**: See `SYSTEMD_SERVICES.md` for complete setup guide
 
 ### Testing and Quality
 - **Run all tests**: `pytest` (58 tests, >80% coverage required)

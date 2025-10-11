@@ -6,7 +6,7 @@ Add these **TWO LINES** to your HTML, right before the closing `</body>` tag:
 
 ```html
 <script>
-  window.IHNEN_CHAT_CONFIG = {
+  window.RAG_CHAT_CONFIG = {
     apiKey: 'apikey_live_576CiGGwTDtycRirommpqag_TSfmneopzY2opPqOw-8'
   };
 </script>
@@ -25,7 +25,7 @@ Add these **TWO LINES** to your HTML, right before the closing `</body>` tag:
 
 **API Key:** `apikey_live_576CiGGwTDtycRirommpqag_TSfmneopzY2opPqOw-8`
 **Workspace ID:** `518341a0-ae02-4e28-b161-11ea84a392c1`
-**Agent:** Automatically loaded (Ihnen Support Bot)
+**Agent:** Automatically loaded (Support Bot)
 **Rate Limit:** 120 requests/minute
 
 > ⚠️ **Keep your API key secret!** Don't commit it to public repositories.
@@ -45,8 +45,8 @@ Add these **TWO LINES** to your HTML, right before the closing `</body>` tag:
 
     <!-- Secure Chat Widget -->
     <script>
-      window.IHNEN_CHAT_CONFIG = {
-        apiKey: '{{ env("IHNEN_CHAT_API_KEY") }}'
+      window.RAG_CHAT_CONFIG = {
+        apiKey: '{{ env("RAG_CHAT_API_KEY") }}'
       };
     </script>
     <script src="https://botapi.kobra-dataworks.de/static/chat-widget-secure.js"></script>
@@ -56,7 +56,7 @@ Add these **TWO LINES** to your HTML, right before the closing `</body>` tag:
 
 **In your `.env`:**
 ```env
-IHNEN_CHAT_API_KEY=apikey_live_576CiGGwTDtycRirommpqag_TSfmneopzY2opPqOw-8
+RAG_CHAT_API_KEY=apikey_live_576CiGGwTDtycRirommpqag_TSfmneopzY2opPqOw-8
 ```
 
 ### Plain HTML
@@ -72,7 +72,7 @@ IHNEN_CHAT_API_KEY=apikey_live_576CiGGwTDtycRirommpqag_TSfmneopzY2opPqOw-8
 
     <!-- Secure Chat Widget -->
     <script>
-      window.IHNEN_CHAT_CONFIG = {
+      window.RAG_CHAT_CONFIG = {
         apiKey: 'apikey_live_576CiGGwTDtycRirommpqag_TSfmneopzY2opPqOw-8'
       };
     </script>
@@ -86,8 +86,8 @@ IHNEN_CHAT_API_KEY=apikey_live_576CiGGwTDtycRirommpqag_TSfmneopzY2opPqOw-8
 ```php
 <!-- Add before </body> in your theme's footer.php -->
 <script>
-  window.IHNEN_CHAT_CONFIG = {
-    apiKey: '<?php echo get_option('ihnen_chat_api_key'); ?>'
+  window.RAG_CHAT_CONFIG = {
+    apiKey: '<?php echo get_option('rag_chat_api_key'); ?>'
   };
 </script>
 <script src="https://botapi.kobra-dataworks.de/static/chat-widget-secure.js"></script>
@@ -99,7 +99,7 @@ You can customize the widget appearance:
 
 ```html
 <script>
-  window.IHNEN_CHAT_CONFIG = {
+  window.RAG_CHAT_CONFIG = {
     apiKey: 'apikey_live_576CiGGwTDtycRirommpqag_TSfmneopzY2opPqOw-8',
     primaryColor: '#667eea',  // Chat button color
     position: 'bottom-right'   // bottom-right, bottom-left, top-right, top-left
@@ -124,21 +124,21 @@ Control the widget programmatically:
 
 ```javascript
 // Open chat
-IhnenChatWidget.open();
+RagChatWidget.open();
 
 // Close chat
-IhnenChatWidget.close();
+RagChatWidget.close();
 
 // Toggle chat
-IhnenChatWidget.toggle();
+RagChatWidget.toggle();
 
 // Check if open
-if (IhnenChatWidget.isOpen()) {
+if (RagChatWidget.isOpen()) {
     console.log('Chat is open');
 }
 
 // Reload widget (re-validate and refresh)
-IhnenChatWidget.reload();
+RagChatWidget.reload();
 ```
 
 ## Error Handling
@@ -207,7 +207,7 @@ curl -X DELETE https://botapi.kobra-dataworks.de/v1/workspaces/518341a0-ae02-4e2
 ### Widget Not Showing
 
 **Check:**
-1. API key is correct in `IHNEN_CHAT_CONFIG`
+1. API key is correct in `RAG_CHAT_CONFIG`
 2. Script tags are before `</body>`
 3. Browser console for errors (F12)
 4. Network tab shows successful validation request
@@ -246,7 +246,7 @@ If you're using the basic widget, switch to secure:
 **After (secure):**
 ```html
 <script>
-  window.IHNEN_CHAT_CONFIG = {
+  window.RAG_CHAT_CONFIG = {
     apiKey: 'apikey_live_576CiGGwTDtycRirommpqag_TSfmneopzY2opPqOw-8'
   };
 </script>

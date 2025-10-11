@@ -72,7 +72,7 @@ Add to your `.env`:
 RAG_API_URL=http://localhost:8058
 RAG_WORKSPACE_ID=your-workspace-uuid-here
 RAG_AGENT_ID=your-agent-uuid-here
-RAG_AGENT_NAME="Ihnen Support Bot"
+RAG_AGENT_NAME="Support Bot"
 ```
 
 Use in any Blade template:
@@ -280,14 +280,14 @@ Add to your Laravel middleware or meta tag:
 4. Copy the Workspace ID from the URL or page
 5. Note the Agent ID from the agents list
 
-## For Ihnen Support Bot
+## For Support Bot
 
 Based on your setup, use these parameters:
 
 ```env
 RAG_WORKSPACE_ID=<your-ihnen-workspace-id>
 RAG_AGENT_ID=<your-ihnen-support-bot-agent-id>
-RAG_AGENT_NAME="Ihnen Support Bot"
+RAG_AGENT_NAME="Support Bot"
 ```
 
 Replace the UUIDs with actual values from your dashboard.

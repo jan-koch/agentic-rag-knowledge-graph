@@ -1142,7 +1142,7 @@ async def get_chat_widget_secure_js():
 
     Usage:
     <script>
-      window.IHNEN_CHAT_CONFIG = { apiKey: 'your-api-key' };
+      window.RAG_CHAT_CONFIG = { apiKey: 'your-api-key' };
     </script>
     <script src="https://botapi.kobra-dataworks.de/static/chat-widget-secure.js"></script>
     """

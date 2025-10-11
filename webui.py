@@ -1145,14 +1145,19 @@ elif page == "🔌 Widget Embed":
                     api_key_value = 'YOUR_API_KEY_HERE'
                     st.info("🔒 Note: Replace 'YOUR_API_KEY_HERE' with your actual API key. The key is only shown once at creation time.")
 
+                # Escape values for JavaScript to prevent XSS
+                greeting_value = custom_greeting or f"Hallo! Ich bin {details['agent_name']}. Wie kann ich Ihnen helfen?"
+                agent_name_safe = json.dumps(details['agent_name'])[1:-1]  # Remove outer quotes
+                greeting_safe = json.dumps(greeting_value)[1:-1]  # Remove outer quotes
+
                 floating_code = f"""<!-- {details['agent_name']} Floating Chat Widget -->
 <script>
   window.RAG_CHAT_CONFIG = {{
     apiKey: '{api_key_value}',{' // ✅ Pre-filled' if prefilled_api_key else ' // Replace with actual API key'}
     workspaceId: '{details['workspace_id']}',
     agentId: '{details['agent_id']}',
-    agentName: '{details['agent_name']}',
-    greeting: '{custom_greeting or f"Hallo! Ich bin {details['agent_name']}. Wie kann ich Ihnen helfen?"}',
+    agentName: '{agent_name_safe}',
+    greeting: '{greeting_safe}',
     language: 'de', // 'de' for German, 'en' for English
     position: 'bottom-right',
     theme: 'light'

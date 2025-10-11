@@ -64,7 +64,7 @@ st.link_button(
 ```html
 <!-- Support Bot Floating Chat Widget -->
 <script>
-  window.IHNEN_CHAT_CONFIG = {
+  window.RAG_CHAT_CONFIG = {
     apiKey: 'sk_live_abc123def456ghi789jkl', // ✅ Pre-filled
     workspaceId: '550e8400-e29b-41d4-a716-446655440000',
     agentId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
@@ -82,7 +82,7 @@ st.link_button(
 ```html
 <!-- Support Bot Floating Chat Widget -->
 <script>
-  window.IHNEN_CHAT_CONFIG = {
+  window.RAG_CHAT_CONFIG = {
     apiKey: 'YOUR_API_KEY_HERE', // Replace with actual API key
     workspaceId: '550e8400-e29b-41d4-a716-446655440000',
     agentId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
