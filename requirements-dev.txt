@@ -1,0 +1,31 @@
+# Development and Testing Dependencies
+
+# Testing framework
+pytest==8.4.1
+pytest-asyncio==1.0.0
+pytest-cov==6.0.0
+pytest-xdist==3.6.1  # Parallel test execution
+pytest-timeout==2.3.1  # Test timeouts
+pytest-watch==4.2.0  # Watch mode for tests
+pytest-benchmark==4.0.0  # Performance benchmarking
+
+# Code quality
+ruff==0.8.7  # Fast linter
+black==24.12.0  # Code formatter
+mypy==1.14.1  # Type checking
+isort==5.13.2  # Import sorting
+
+# Pre-commit hooks
+pre-commit==4.0.1
+
+# Security scanning
+pip-audit==2.7.3  # Dependency vulnerability scanner
+bandit==1.8.0  # Security issue scanner
+
+# Coverage reporting
+coverage[toml]==7.6.10
+
+# Development tools
+ipython==8.31.0  # Enhanced Python shell
+ipdb==0.13.13  # Debugger
+rich==14.0.0  # Beautiful terminal output

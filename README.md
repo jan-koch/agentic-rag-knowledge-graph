@@ -388,7 +388,43 @@ agentic-rag-knowledge-graph/
 └── tests/                # Comprehensive test suite
 ```
 
-## Running Tests
+## Testing
+
+![CI](https://github.com/your-org/agentic-rag-knowledge-graph/workflows/CI/badge.svg)
+
+This project has comprehensive automated testing with CI/CD integration.
+
+### Quick Start
+
+```bash
+# First time setup
+make setup-test-env
+
+# Run full test suite with coverage
+make test
+
+# Run fast unit tests only (30 seconds)
+make test-fast
+
+# Run integration tests
+make test-integration
+
+# Install pre-commit hooks (auto-run tests before commits)
+make install-hooks
+```
+
+### Using Make Commands
+
+```bash
+make test           # Full test suite with coverage
+make test-fast      # Quick unit tests
+make test-coverage  # Open HTML coverage report
+make lint           # Run linting checks
+make format         # Format code with black
+make check          # Quick check before committing
+```
+
+### Using pytest Directly
 
 ```bash
 # Run all tests
@@ -398,9 +434,20 @@ pytest
 pytest --cov=agent --cov=ingestion --cov-report=html
 
 # Run specific test categories
-pytest tests/agent/
-pytest tests/ingestion/
+pytest -m unit              # Unit tests only
+pytest -m integration       # Integration tests only
+pytest -m "not slow"        # Skip slow tests
+pytest tests/agent/         # Specific directory
 ```
+
+### CI/CD Pipeline
+
+Automated testing runs on:
+- **Every push**: Full test suite + linting
+- **Pull requests**: Strict quality gates, integration tests
+- **Nightly**: Extended test suite with performance benchmarks
+
+See [TESTING.md](TESTING.md) for comprehensive testing documentation.
 
 ## Docker Management
 
