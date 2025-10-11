@@ -33,6 +33,26 @@
             font-weight: 600;
             font-size: 16px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #new-chat-button {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            color: white;
+            padding: 6px 14px;
+            border-radius: 16px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        #new-chat-button:hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.8);
         }
 
         #chat-messages {
@@ -303,6 +323,7 @@
     <div id="chat-container">
         <div id="chat-header">
             <span id="agent-name">Chat Support</span>
+            <button id="new-chat-button">New Chat</button>
         </div>
 
         <div id="chat-messages">
@@ -335,6 +356,9 @@
         const GREETING = urlParams.get('greeting') || 'Hello! How can I help you today?';
         const LANGUAGE = urlParams.get('language') || 'en';
 
+        // Generate storage key unique to workspace + agent
+        const STORAGE_KEY = `rag_chat_session_${WORKSPACE_ID}_${AGENT_ID}`;
+
         let sessionId = null;
         let isLoading = false;
 
@@ -352,6 +376,34 @@
         const chatMessages = document.getElementById('chat-messages');
         const chatInput = document.getElementById('chat-input');
         const sendButton = document.getElementById('send-button');
+
+        // localStorage helper functions
+        function saveSessionToStorage(sessionId) {
+            try {
+                localStorage.setItem(STORAGE_KEY, sessionId);
+                console.log(`Saved session ${sessionId} to localStorage`);
+            } catch (e) {
+                console.warn('Failed to save session to localStorage:', e);
+            }
+        }
+
+        function loadSessionFromStorage() {
+            try {
+                return localStorage.getItem(STORAGE_KEY);
+            } catch (e) {
+                console.warn('Failed to load session from localStorage:', e);
+                return null;
+            }
+        }
+
+        function clearSessionFromStorage() {
+            try {
+                localStorage.removeItem(STORAGE_KEY);
+                console.log('Cleared session from localStorage');
+            } catch (e) {
+                console.warn('Failed to clear session from localStorage:', e);
+            }
+        }
 
         // Add message to chat
         function addMessage(role, content) {
@@ -424,6 +476,66 @@
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
+        // Load message history from API
+        async function loadMessageHistory(sessionId) {
+            try {
+                const response = await fetch(`${API_URL}/sessions/${sessionId}/messages?limit=50`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        // Session expired or not found
+                        console.log('Session not found or expired');
+                        clearSessionFromStorage();
+                        return null;
+                    }
+                    throw new Error('Failed to load message history');
+                }
+
+                const data = await response.json();
+                console.log(`Loaded ${data.messages.length} messages from history`);
+                return data.messages;
+
+            } catch (error) {
+                console.error('Error loading message history:', error);
+                return null;
+            }
+        }
+
+        // Restore conversation from history
+        async function restoreConversation(sessionId) {
+            // Show loading indicator
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'message assistant';
+            loadingDiv.innerHTML = '<div class="message-avatar">A</div><div class="message-content"><em>Restoring conversation...</em></div>';
+            chatMessages.appendChild(loadingDiv);
+
+            // Load messages
+            const messages = await loadMessageHistory(sessionId);
+
+            // Remove loading indicator
+            loadingDiv.remove();
+
+            if (!messages || messages.length === 0) {
+                // Session expired or no messages - start fresh
+                console.log('No messages found, starting fresh conversation');
+                clearSessionFromStorage();
+                return false;
+            }
+
+            // Display all messages
+            for (const msg of messages) {
+                addMessage(msg.role, msg.content);
+            }
+
+            console.log(`Restored ${messages.length} messages from previous conversation`);
+            return true;
+        }
+
         // Send message to API
         async function sendMessage(message) {
             if (!message.trim() || isLoading) return;
@@ -470,6 +582,7 @@
                 // Store session ID for conversation continuity
                 if (data.session_id) {
                     sessionId = data.session_id;
+                    saveSessionToStorage(sessionId);  // Save to localStorage
                 }
 
                 // Add assistant response
@@ -497,15 +610,60 @@
             }
         });
 
+        // New Chat button - start fresh conversation
+        document.getElementById('new-chat-button').addEventListener('click', () => {
+            const translations = {
+                en: 'Start a new conversation? Your current chat will be saved.',
+                de: 'Neue Konversation starten? Ihr aktueller Chat wird gespeichert.'
+            };
+            const confirmMessage = translations[LANGUAGE] || translations.en;
+
+            if (confirm(confirmMessage)) {
+                // Clear current session from storage
+                clearSessionFromStorage();
+                sessionId = null;
+
+                // Clear chat messages
+                chatMessages.innerHTML = '';
+
+                // Show greeting
+                addMessage('assistant', GREETING);
+
+                console.log('Started new conversation');
+            }
+        });
+
         // Focus input on load
         chatInput.focus();
 
-        // Add welcome message using custom greeting
-        if (WORKSPACE_ID && AGENT_ID) {
+        // Initialize conversation
+        async function initializeChat() {
+            if (!WORKSPACE_ID || !AGENT_ID) {
+                showError('Widget not properly configured. Please provide workspace_id and agent_id parameters.');
+                return;
+            }
+
+            // Try to restore previous session
+            const savedSessionId = loadSessionFromStorage();
+
+            if (savedSessionId) {
+                sessionId = savedSessionId;
+                console.log(`Found saved session: ${sessionId}`);
+                const restored = await restoreConversation(savedSessionId);
+
+                if (restored) {
+                    // Conversation restored successfully
+                    console.log('Restored previous conversation');
+                    return;
+                }
+            }
+
+            // No previous session or restoration failed - show greeting
             addMessage('assistant', GREETING);
-        } else {
-            showError('Widget not properly configured. Please provide workspace_id and agent_id parameters.');
         }
+
+        // Initialize on load
+        initializeChat();
     </script>
 </body>
 </html>

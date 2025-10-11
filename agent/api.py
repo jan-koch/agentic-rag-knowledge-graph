@@ -716,13 +716,53 @@ async def get_session_info(session_id: str, api_key: str = Depends(verify_api_ke
         session = await get_session(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
-        
+
         return session
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Session retrieval failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/sessions/{session_id}/messages")
+async def get_session_messages_endpoint(
+    session_id: str,
+    limit: int = 50,
+    api_key: str = Depends(verify_api_key)
+):
+    """
+    Get message history for a session.
+
+    Args:
+        session_id: Session UUID
+        limit: Maximum number of messages to return (default 50)
+
+    Returns:
+        List of messages ordered by creation time
+    """
+    try:
+        # Validate session exists and is not expired
+        session = await get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found or expired")
+
+        # Get messages using existing function
+        messages = await get_session_messages(session_id, limit=limit)
+
+        logger.info(f"Retrieved {len(messages)} messages for session {session_id}")
+
+        return {
+            "session_id": session_id,
+            "messages": messages,
+            "total": len(messages)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get session messages: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
