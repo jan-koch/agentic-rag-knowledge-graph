@@ -81,6 +81,12 @@ make test-coverage
 
 # Watch mode (auto-run on file changes)
 make test-watch
+
+# Test database management (on ports 5433, 7475, 7688)
+make docker-test-up       # Start test databases
+make docker-test-down     # Stop test databases
+make docker-test-logs     # View test database logs
+make docker-test-reset    # Reset test databases (removes all data)
 ```
 
 ### Using Scripts
@@ -321,28 +327,52 @@ Add to your README:
 
 # This will:
 # 1. Create .env.test file
-# 2. Start Docker services (PostgreSQL + Neo4j)
+# 2. Start Docker services (PostgreSQL + Neo4j) on alternative ports
+#    - PostgreSQL: port 5433 (instead of 5432)
+#    - Neo4j HTTP: port 7475 (instead of 7474)
+#    - Neo4j Bolt: port 7688 (instead of 7687)
 # 3. Initialize test database
 # 4. Install test dependencies
 ```
 
+#### Port Configuration
+
+To avoid conflicts with production databases, the test environment uses alternative ports:
+
+| Service | Production Port | Test Port | Purpose |
+|---------|----------------|-----------|----------|
+| PostgreSQL | 5432 | **5433** | Database server |
+| Neo4j HTTP | 7474 | **7475** | Web interface |
+| Neo4j Bolt | 7687 | **7688** | Graph queries |
+
+This allows you to run both production and test databases simultaneously without conflicts.
+
 ### Database Services
 
+The test environment uses `docker-compose.test.yml` with alternative ports:
+
 ```bash
-# Start services
-docker compose up -d
+# Start test services (on ports 5433, 7475, 7688)
+docker compose -f docker-compose.test.yml up -d
 
 # Check status
-docker compose ps
+docker compose -f docker-compose.test.yml ps
 
 # View logs
-docker compose logs -f
+docker compose -f docker-compose.test.yml logs -f postgres
+docker compose -f docker-compose.test.yml logs -f neo4j
 
 # Stop services
-docker compose down
+docker compose -f docker-compose.test.yml down
 
-# Reset (removes all data)
-docker compose down -v
+# Reset (removes all test data)
+docker compose -f docker-compose.test.yml down -v
+```
+
+**Production services** (on default ports 5432, 7474, 7687) continue to use:
+```bash
+docker compose up -d
+docker compose down
 ```
 
 ### Running Specific Test Categories
@@ -369,11 +399,12 @@ pytest -m "not slow"
 
 **Solution**:
 ```bash
-# 1. Ensure databases are running
-docker compose ps
+# 1. Ensure test databases are running
+docker compose -f docker-compose.test.yml ps
 
 # 2. Reset test environment
-make docker-reset
+docker compose -f docker-compose.test.yml down -v
+./scripts/setup-test-env.sh
 
 # 3. Reload environment variables
 source .env.test
@@ -464,20 +495,22 @@ python -c "import sys; print('\n'.join(sys.path))"
 
 **Solution**:
 ```bash
-# 1. Check if services are running
-docker compose ps
+# 1. Check if test services are running
+docker compose -f docker-compose.test.yml ps
 
 # 2. Check service health
-docker compose logs postgres
-docker compose logs neo4j
+docker compose -f docker-compose.test.yml logs postgres
+docker compose -f docker-compose.test.yml logs neo4j
 
 # 3. Restart services
-docker compose restart
+docker compose -f docker-compose.test.yml restart
 
-# 4. Verify connection
-pg_isready -h localhost -p 5432
-curl http://localhost:7474
+# 4. Verify connection (note the test ports)
+pg_isready -h localhost -p 5433 -U test_user
+curl http://localhost:7475
 ```
+
+**Note**: If you see "port already in use" errors, make sure you're using the test compose file (`docker-compose.test.yml`) which uses alternative ports (5433, 7475, 7688) instead of production ports (5432, 7474, 7687).
 
 ## Best Practices
 

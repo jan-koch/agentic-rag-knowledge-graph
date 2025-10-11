@@ -65,19 +65,34 @@ clean: ## Clean up generated files
 	rm -rf htmlcov .coverage coverage.xml
 	@echo "✓ Cleaned up generated files"
 
-docker-up: ## Start Docker services (PostgreSQL + Neo4j)
+docker-up: ## Start production Docker services (PostgreSQL + Neo4j on ports 5432, 7474, 7687)
 	docker compose up -d
 
-docker-down: ## Stop Docker services
+docker-down: ## Stop production Docker services
 	docker compose down
 
-docker-logs: ## Show Docker logs
+docker-logs: ## Show production Docker logs
 	docker compose logs -f
 
-docker-reset: ## Reset Docker services (removes volumes)
+docker-reset: ## Reset production Docker services (removes volumes)
 	docker compose down -v
 	docker compose up -d
 	@echo "Waiting for services to be ready..."
+	@sleep 10
+
+docker-test-up: ## Start test Docker services (PostgreSQL + Neo4j on ports 5433, 7475, 7688)
+	docker compose -f docker-compose.test.yml up -d
+
+docker-test-down: ## Stop test Docker services
+	docker compose -f docker-compose.test.yml down
+
+docker-test-logs: ## Show test Docker logs
+	docker compose -f docker-compose.test.yml logs -f
+
+docker-test-reset: ## Reset test Docker services (removes volumes)
+	docker compose -f docker-compose.test.yml down -v
+	docker compose -f docker-compose.test.yml up -d
+	@echo "Waiting for test services to be ready..."
 	@sleep 10
 
 ci-local: ## Run CI checks locally (mimics GitHub Actions)

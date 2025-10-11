@@ -29,8 +29,9 @@ if [ ! -f ".env.test" ]; then
     echo -e "${YELLOW}Creating .env.test file...${NC}"
     cat > .env.test << 'EOF'
 # Test Environment Configuration
-DATABASE_URL=postgresql://test_user:test_password@localhost:5432/test_db
-NEO4J_URI=bolt://localhost:7687
+# Using alternative ports to avoid conflicts with production databases
+DATABASE_URL=postgresql://test_user:test_password@localhost:5433/test_db
+NEO4J_URI=bolt://localhost:7688
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=test_password
 LLM_API_KEY=sk-test-key-for-testing
@@ -47,39 +48,39 @@ EOF
     echo -e "${GREEN}Created .env.test${NC}"
 fi
 
-# Start test databases
+# Start test databases (using test-specific compose file with alternative ports)
 echo -e "\n${YELLOW}Starting test databases...${NC}"
-docker compose up -d postgres neo4j
+docker compose -f docker-compose.test.yml up -d postgres neo4j
 
-# Wait for PostgreSQL
+# Wait for PostgreSQL (on test port 5433)
 echo -e "${YELLOW}Waiting for PostgreSQL to be ready...${NC}"
 for i in {1..30}; do
-    if pg_isready -h localhost -p 5432 -U postgres &> /dev/null; then
-        echo -e "${GREEN}PostgreSQL is ready!${NC}"
+    if pg_isready -h localhost -p 5433 -U test_user &> /dev/null; then
+        echo -e "${GREEN}PostgreSQL is ready on port 5433!${NC}"
         break
     fi
     echo -n "."
     sleep 1
 done
 
-# Wait for Neo4j
+# Wait for Neo4j (on test port 7475)
 echo -e "\n${YELLOW}Waiting for Neo4j to be ready...${NC}"
 for i in {1..30}; do
-    if curl -s http://localhost:7474 > /dev/null 2>&1; then
-        echo -e "${GREEN}Neo4j is ready!${NC}"
+    if curl -s http://localhost:7475 > /dev/null 2>&1; then
+        echo -e "${GREEN}Neo4j is ready on ports 7475/7688!${NC}"
         break
     fi
     echo -n "."
     sleep 2
 done
 
-# Initialize test database if needed
+# Initialize test database if needed (on test port 5433)
 echo -e "\n${YELLOW}Initializing test database schema...${NC}"
 if [ -f "sql/schema.sql" ]; then
-    PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "DROP DATABASE IF EXISTS test_db;" || true
-    PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "CREATE DATABASE test_db;" || true
-    PGPASSWORD=postgres psql -h localhost -U postgres -d test_db -c "CREATE EXTENSION IF NOT EXISTS vector;"
-    echo -e "${GREEN}Test database initialized${NC}"
+    PGPASSWORD=test_password psql -h localhost -p 5433 -U test_user -d postgres -c "DROP DATABASE IF EXISTS test_db;" || true
+    PGPASSWORD=test_password psql -h localhost -p 5433 -U test_user -d postgres -c "CREATE DATABASE test_db;" || true
+    PGPASSWORD=test_password psql -h localhost -p 5433 -U test_user -d test_db -c "CREATE EXTENSION IF NOT EXISTS vector;"
+    echo -e "${GREEN}Test database initialized on port 5433${NC}"
 fi
 
 # Check virtual environment
