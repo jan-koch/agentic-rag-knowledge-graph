@@ -343,15 +343,30 @@ async def execute_agent(
                     session_id
                 )
 
+        # Fetch workspace details for context
+        workspace_name = None
+        workspace_description = None
+        if workspace_id:
+            from .db_utils import get_workspace
+            workspace = await get_workspace(workspace_id)
+            if workspace:
+                workspace_name = workspace.get('name')
+                workspace_description = workspace.get('description')
+                logger.info(f"Using workspace context: {workspace_name} (ID: {workspace_id})")
+
+        # Generate workspace-aware system prompt
+        from .prompts import get_workspace_prompt
+        dynamic_system_prompt = get_workspace_prompt(workspace_name, workspace_description)
+
         # Create dependencies
         deps = AgentDependencies(
             session_id=session_id,
             workspace_id=workspace_id
         )
-        
+
         # Get conversation context
         context = await get_conversation_context(session_id)
-        
+
         # Build prompt with context
         full_prompt = message
         if context:
@@ -360,9 +375,9 @@ async def execute_agent(
                 for msg in context[-6:]  # Last 3 turns
             ])
             full_prompt = f"Previous conversation:\n{context_str}\n\nCurrent question: {message}"
-        
-        # Run the agent
-        result = await rag_agent.run(full_prompt, deps=deps)
+
+        # Run the agent with dynamic system prompt
+        result = await rag_agent.run(full_prompt, deps=deps, system_prompt=dynamic_system_prompt)
         
         response = result.data
         tools_used = extract_tool_calls(result)
@@ -465,16 +480,42 @@ async def chat_stream(request: ChatRequest, api_key: str = Depends(verify_api_ke
             """Generate streaming response using agent.iter() pattern."""
             try:
                 yield f"data: {json.dumps({'type': 'session', 'session_id': session_id})}\n\n"
-                
+
+                # Get workspace_id from session or request
+                workspace_id = request.workspace_id
+                if not workspace_id:
+                    from .db_utils import db_pool
+                    async with db_pool.acquire() as conn:
+                        workspace_id = await conn.fetchval(
+                            "SELECT workspace_id::text FROM sessions WHERE id = $1::uuid",
+                            session_id
+                        )
+
+                # Fetch workspace details for context
+                workspace_name = None
+                workspace_description = None
+                if workspace_id:
+                    from .db_utils import get_workspace
+                    workspace = await get_workspace(workspace_id)
+                    if workspace:
+                        workspace_name = workspace.get('name')
+                        workspace_description = workspace.get('description')
+                        logger.info(f"Streaming with workspace context: {workspace_name} (ID: {workspace_id})")
+
+                # Generate workspace-aware system prompt
+                from .prompts import get_workspace_prompt
+                dynamic_system_prompt = get_workspace_prompt(workspace_name, workspace_description)
+
                 # Create dependencies
                 deps = AgentDependencies(
                     session_id=session_id,
+                    workspace_id=workspace_id,
                     user_id=request.user_id
                 )
-                
+
                 # Get conversation context
                 context = await get_conversation_context(session_id)
-                
+
                 # Build input with context
                 full_prompt = request.message
                 if context:
@@ -483,7 +524,7 @@ async def chat_stream(request: ChatRequest, api_key: str = Depends(verify_api_ke
                         for msg in context[-6:]
                     ])
                     full_prompt = f"Previous conversation:\n{context_str}\n\nCurrent question: {request.message}"
-                
+
                 # Save user message immediately
                 await add_message(
                     session_id=session_id,
@@ -491,11 +532,11 @@ async def chat_stream(request: ChatRequest, api_key: str = Depends(verify_api_ke
                     content=request.message,
                     metadata={"user_id": request.user_id}
                 )
-                
+
                 full_response = ""
-                
-                # Stream using agent.iter() pattern
-                async with rag_agent.iter(full_prompt, deps=deps) as run:
+
+                # Stream using agent.iter() pattern with dynamic system prompt
+                async with rag_agent.iter(full_prompt, deps=deps, system_prompt=dynamic_system_prompt) as run:
                     async for node in run:
                         if rag_agent.is_model_request_node(node):
                             # Stream tokens from the model

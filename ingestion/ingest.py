@@ -73,9 +73,12 @@ class DocumentIngestionPipeline:
         
         self.chunker = create_chunker(self.chunker_config)
         self.embedder = create_embedder()
-        self.graph_builder = create_graph_builder()
-        
+        self.graph_builder = create_graph_builder(workspace_id=workspace_id)
+
         self._initialized = False
+
+        if workspace_id:
+            logger.info(f"Ingestion pipeline configured for workspace: {workspace_id}")
     
     async def initialize(self):
         """Initialize database connections."""

@@ -21,7 +21,8 @@ from .db_utils import (
 from .graph_utils import (
     search_knowledge_graph,
     get_entity_relationships,
-    graph_client
+    graph_client,
+    get_workspace_graph_client
 )
 from .models import ChunkResult, GraphSearchResult, DocumentMetadata
 from .providers import get_embedding_client, get_embedding_model
@@ -158,12 +159,16 @@ async def graph_search_tool(input_data: GraphSearchInput) -> List[GraphSearchRes
         List of graph search results
     """
     try:
-        # TODO: Get workspace-specific Graphiti client
-        # For now, using global client - will be updated when we add workspace-aware client management
-        results = await search_knowledge_graph(
-            query=input_data.query
-        )
-        
+        # Use workspace-specific Graphiti client for complete isolation
+        if input_data.workspace_id:
+            logger.info(f"Using workspace-specific graph client for workspace: {input_data.workspace_id}")
+            workspace_client = await get_workspace_graph_client(input_data.workspace_id)
+            results = await workspace_client.search(input_data.query)
+        else:
+            # Fallback to global client if no workspace_id (backwards compatibility)
+            logger.warning("No workspace_id provided for graph search, using global client")
+            results = await search_knowledge_graph(query=input_data.query)
+
         # Convert to GraphSearchResult models
         return [
             GraphSearchResult(
@@ -175,7 +180,7 @@ async def graph_search_tool(input_data: GraphSearchInput) -> List[GraphSearchRes
             )
             for r in results
         ]
-        
+
     except Exception as e:
         logger.error(f"Graph search failed: {e}")
         return []
