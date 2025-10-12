@@ -57,10 +57,12 @@ tests/
 We use pytest markers to categorize tests:
 
 - **`unit`**: Fast unit tests (< 1 second each)
-- **`integration`**: Tests with external dependencies
+- **`integration`**: Tests with external dependencies (currently none, infrastructure ready)
 - **`slow`**: Long-running tests
 - **`smoke`**: Critical path tests
 - **`e2e`**: End-to-end tests
+
+**Note**: Integration tests are not yet implemented. The CI pipeline will skip them gracefully if none are found.
 
 ## Running Tests
 

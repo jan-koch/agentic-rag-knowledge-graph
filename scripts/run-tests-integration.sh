@@ -55,6 +55,9 @@ EXIT_CODE=$?
 
 if [ $EXIT_CODE -eq 0 ]; then
     echo -e "\n${GREEN}✓ Integration tests passed!${NC}"
+elif [ $EXIT_CODE -eq 5 ]; then
+    echo -e "\n${YELLOW}⚠ No integration tests found. This is expected if integration tests haven't been written yet.${NC}"
+    exit 0
 else
     echo -e "\n${RED}✗ Some integration tests failed!${NC}"
 fi
