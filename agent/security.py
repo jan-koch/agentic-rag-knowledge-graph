@@ -9,7 +9,7 @@ import time
 import logging
 from typing import Optional, List, Dict, Any
 from functools import wraps
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from fastapi import HTTPException, Request, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -260,7 +260,7 @@ async def verify_n8n_api_key(credentials: Optional[HTTPAuthorizationCredentials]
         )
     
     if not hmac.compare_digest(credentials.credentials, N8N_API_KEY):
-        logger.warning(f"Invalid API key attempted")
+        logger.warning("Invalid API key attempted")
         raise SecurityError(
             status_code=401,
             detail="Invalid API key"
