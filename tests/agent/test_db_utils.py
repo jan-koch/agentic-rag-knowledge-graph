@@ -105,21 +105,23 @@ class TestSessionManagement:
             mock_conn.fetchrow.return_value = {"id": "session-123"}
             mock_pool.acquire.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
             mock_pool.acquire.return_value.__aexit__ = AsyncMock(return_value=None)
-            
+
             session_id = await create_session(
                 user_id="user-123",
+                workspace_id="workspace-456",
                 metadata={"client": "web"},
                 timeout_minutes=30
             )
-            
+
             assert session_id == "session-123"
             mock_conn.fetchrow.assert_called_once()
-            
+
             # Check the SQL call
             call_args = mock_conn.fetchrow.call_args
             assert "INSERT INTO sessions" in call_args[0][0]
             assert call_args[0][1] == "user-123"  # user_id
-            assert json.loads(call_args[0][2]) == {"client": "web"}  # metadata
+            assert call_args[0][2] == "workspace-456"  # workspace_id
+            assert json.loads(call_args[0][3]) == {"client": "web"}  # metadata
     
     @pytest.mark.asyncio
     async def test_get_session_exists(self):
@@ -183,25 +185,30 @@ class TestMessageManagement:
         """Test adding message."""
         with patch('agent.db_utils.db_pool') as mock_pool:
             mock_conn = AsyncMock()
+            # Mock fetchval to return workspace_id
+            mock_conn.fetchval.return_value = "workspace-456"
+            # Mock fetchrow to return message id
             mock_conn.fetchrow.return_value = {"id": "message-123"}
             mock_pool.acquire.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
             mock_pool.acquire.return_value.__aexit__ = AsyncMock(return_value=None)
-            
+
             message_id = await add_message(
                 session_id="session-123",
                 role="user",
                 content="Hello",
                 metadata={"client": "web"}
             )
-            
+
             assert message_id == "message-123"
+            # Check that fetchval was called for workspace_id
+            mock_conn.fetchval.assert_called_once()
             mock_conn.fetchrow.assert_called_once()
-            
+
             # Check the SQL call
             call_args = mock_conn.fetchrow.call_args
             assert "INSERT INTO messages" in call_args[0][0]
-            assert call_args[0][2] == "user"  # role
-            assert call_args[0][3] == "Hello"  # content
+            assert call_args[0][3] == "user"  # role
+            assert call_args[0][4] == "Hello"  # content
     
     @pytest.mark.asyncio
     async def test_get_session_messages(self):
@@ -324,14 +331,14 @@ class TestVectorSearch:
             mock_conn.fetch.return_value = mock_results
             mock_pool.acquire.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
             mock_pool.acquire.return_value.__aexit__ = AsyncMock(return_value=None)
-            
+
             embedding = [0.1] * 1536  # Mock embedding
-            results = await vector_search(embedding, limit=5)
-            
+            results = await vector_search(embedding, workspace_id="workspace-123", limit=5)
+
             assert len(results) == 1
             assert results[0]["chunk_id"] == "chunk-1"
             assert results[0]["similarity"] == 0.95
-            
+
             # Check that match_chunks function was called
             mock_conn.fetch.assert_called_once()
             call_args = mock_conn.fetch.call_args
@@ -358,15 +365,16 @@ class TestVectorSearch:
             mock_conn.fetch.return_value = mock_results
             mock_pool.acquire.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
             mock_pool.acquire.return_value.__aexit__ = AsyncMock(return_value=None)
-            
+
             embedding = [0.1] * 1536
             results = await hybrid_search(
                 embedding=embedding,
                 query_text="test query",
+                workspace_id="workspace-123",
                 limit=5,
                 text_weight=0.3
             )
-            
+
             assert len(results) == 1
             assert results[0]["combined_score"] == 0.90
             assert results[0]["vector_similarity"] == 0.85

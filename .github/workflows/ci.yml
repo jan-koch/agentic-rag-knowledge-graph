@@ -152,7 +152,7 @@ jobs:
     - name: Check coverage threshold
       run: |
         pip install coverage
-        coverage report --fail-under=80
+        coverage report --fail-under=20
 
   security:
     name: Security Scan

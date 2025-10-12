@@ -392,7 +392,7 @@ agentic-rag-knowledge-graph/
 
 ![CI](https://github.com/your-org/agentic-rag-knowledge-graph/workflows/CI/badge.svg)
 
-This project has comprehensive automated testing with CI/CD integration.
+This project includes automated testing with CI/CD integration. Test coverage is actively being improved.
 
 ### Quick Start
 

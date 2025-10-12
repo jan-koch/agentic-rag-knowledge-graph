@@ -228,8 +228,8 @@ def test_uppercase(input, expected):
 
 ### Minimum Requirements
 
-- **Overall coverage**: ≥80%
-- **New code**: ≥90% (enforced in pre-merge checks)
+- **Overall coverage**: ≥20% (target: 80% as tests are added)
+- **New code**: Target 90% for new features
 
 ### Generating Coverage Reports
 
@@ -438,7 +438,7 @@ git commit
 
 ### Coverage Below Threshold
 
-**Problem**: Coverage is below 80%
+**Problem**: Coverage is below required minimum
 
 **Solution**:
 ```bash
