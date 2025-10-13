@@ -91,6 +91,16 @@ jobs:
       run: |
         pytest -v --cov=agent --cov=ingestion --cov-report=xml --cov-report=term-missing -n auto
 
+    - name: Combine coverage data
+      run: |
+        # Combine coverage data from parallel test runs
+        coverage combine || echo "No coverage data to combine"
+        # Generate reports
+        coverage xml
+        coverage report
+        # List coverage files for debugging
+        ls -la .coverage* || echo "No .coverage files found"
+
     - name: Upload coverage to artifacts
       uses: actions/upload-artifact@v4
       with:
@@ -151,11 +161,41 @@ jobs:
       with:
         name: coverage-3.11
 
+    - name: Debug coverage files
+      run: |
+        echo "Files in current directory:"
+        ls -la
+        echo "Coverage files:"
+        ls -la .coverage* || echo "No .coverage files"
+        echo "XML coverage:"
+        ls -la coverage.xml || echo "No coverage.xml"
+
     - name: Check coverage threshold
       run: |
         pip install coverage
-        # Use the .coverage database file for reporting
-        coverage report --fail-under=20
+        # Check if .coverage file exists and has data
+        if [ -f ".coverage" ]; then
+          echo "Found .coverage file, checking threshold..."
+          coverage report --fail-under=20
+        elif [ -f "coverage.xml" ]; then
+          echo "Only coverage.xml found, parsing XML..."
+          python -c "
+import xml.etree.ElementTree as ET
+tree = ET.parse('coverage.xml')
+root = tree.getroot()
+line_rate = float(root.attrib['line-rate'])
+coverage_pct = line_rate * 100
+print(f'Coverage: {coverage_pct:.2f}%')
+if coverage_pct < 20:
+    print(f'ERROR: Coverage {coverage_pct:.2f}% is below threshold of 20%')
+    exit(1)
+else:
+    print(f'✅ Coverage {coverage_pct:.2f}% meets threshold of 20%')
+"
+        else
+          echo "ERROR: No coverage data found"
+          exit 1
+        fi
 
   security:
     name: Security Scan
