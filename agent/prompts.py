@@ -33,8 +33,7 @@ Remember to:
 
 
 def get_workspace_prompt(
-    workspace_name: Optional[str] = None,
-    workspace_description: Optional[str] = None
+    workspace_name: Optional[str] = None, workspace_description: Optional[str] = None
 ) -> str:
     """
     Generate workspace-aware system prompt.
@@ -69,9 +68,12 @@ def get_workspace_prompt(
 
 
 # Default prompt (for backwards compatibility)
-SYSTEM_PROMPT = BASE_SYSTEM_PROMPT + """
+SYSTEM_PROMPT = (
+    BASE_SYSTEM_PROMPT
+    + """
 
 **IMPORTANT:**
 - Only use information from the knowledge base
 - If information is not available, clearly state so
 - Do not use external knowledge or make assumptions"""
+)

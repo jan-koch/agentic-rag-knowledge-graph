@@ -21,20 +21,20 @@ logger = logging.getLogger(__name__)
 
 class DatabasePool:
     """Manages PostgreSQL connection pool."""
-    
+
     def __init__(self, database_url: Optional[str] = None):
         """
         Initialize database pool.
-        
+
         Args:
             database_url: PostgreSQL connection URL
         """
         self.database_url = database_url or os.getenv("DATABASE_URL")
         if not self.database_url:
             raise ValueError("DATABASE_URL environment variable not set")
-        
+
         self.pool: Optional[Pool] = None
-    
+
     async def initialize(self):
         """Create connection pool."""
         if not self.pool:
@@ -43,23 +43,23 @@ class DatabasePool:
                 min_size=5,
                 max_size=20,
                 max_inactive_connection_lifetime=300,
-                command_timeout=60
+                command_timeout=60,
             )
             logger.info("Database connection pool initialized")
-    
+
     async def close(self):
         """Close connection pool."""
         if self.pool:
             await self.pool.close()
             self.pool = None
             logger.info("Database connection pool closed")
-    
+
     @asynccontextmanager
     async def acquire(self):
         """Acquire a connection from the pool."""
         if not self.pool:
             await self.initialize()
-        
+
         async with self.pool.acquire() as connection:
             yield connection
 
@@ -83,7 +83,7 @@ async def create_session(
     user_id: Optional[str] = None,
     workspace_id: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None,
-    timeout_minutes: int = 60
+    timeout_minutes: int = 60,
 ) -> str:
     """
     Create a new session.
@@ -109,7 +109,7 @@ async def create_session(
             user_id,
             workspace_id,
             json.dumps(metadata or {}),
-            expires_at
+            expires_at,
         )
 
         return result["id"]
@@ -118,10 +118,10 @@ async def create_session(
 async def get_session(session_id: str) -> Optional[Dict[str, Any]]:
     """
     Get session by ID.
-    
+
     Args:
         session_id: Session UUID
-    
+
     Returns:
         Session data or None if not found/expired
     """
@@ -139,9 +139,9 @@ async def get_session(session_id: str) -> Optional[Dict[str, Any]]:
             WHERE id = $1::uuid
             AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
             """,
-            session_id
+            session_id,
         )
-        
+
         if result:
             return {
                 "id": result["id"],
@@ -149,20 +149,22 @@ async def get_session(session_id: str) -> Optional[Dict[str, Any]]:
                 "metadata": json.loads(result["metadata"]),
                 "created_at": result["created_at"].isoformat(),
                 "updated_at": result["updated_at"].isoformat(),
-                "expires_at": result["expires_at"].isoformat() if result["expires_at"] else None
+                "expires_at": (
+                    result["expires_at"].isoformat() if result["expires_at"] else None
+                ),
             }
-        
+
         return None
 
 
 async def update_session(session_id: str, metadata: Dict[str, Any]) -> bool:
     """
     Update session metadata.
-    
+
     Args:
         session_id: Session UUID
         metadata: New metadata to merge
-    
+
     Returns:
         True if updated, False if not found
     """
@@ -175,18 +177,15 @@ async def update_session(session_id: str, metadata: Dict[str, Any]) -> bool:
             AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
             """,
             session_id,
-            json.dumps(metadata)
+            json.dumps(metadata),
         )
-        
+
         return result.split()[-1] != "0"
 
 
 # Message Management Functions
 async def add_message(
-    session_id: str,
-    role: str,
-    content: str,
-    metadata: Optional[Dict[str, Any]] = None
+    session_id: str, role: str, content: str, metadata: Optional[Dict[str, Any]] = None
 ) -> str:
     """
     Add a message to a session.
@@ -203,8 +202,7 @@ async def add_message(
     async with db_pool.acquire() as conn:
         # Get workspace_id from session
         workspace_id = await conn.fetchval(
-            "SELECT workspace_id FROM sessions WHERE id = $1::uuid",
-            session_id
+            "SELECT workspace_id FROM sessions WHERE id = $1::uuid", session_id
         )
 
         result = await conn.fetchrow(
@@ -217,23 +215,22 @@ async def add_message(
             workspace_id,
             role,
             content,
-            json.dumps(metadata or {})
+            json.dumps(metadata or {}),
         )
 
         return result["id"]
 
 
 async def get_session_messages(
-    session_id: str,
-    limit: Optional[int] = None
+    session_id: str, limit: Optional[int] = None
 ) -> List[Dict[str, Any]]:
     """
     Get messages for a session.
-    
+
     Args:
         session_id: Session UUID
         limit: Maximum number of messages to return
-    
+
     Returns:
         List of messages ordered by creation time
     """
@@ -249,19 +246,19 @@ async def get_session_messages(
             WHERE session_id = $1::uuid
             ORDER BY created_at
         """
-        
+
         if limit:
             query += f" LIMIT {limit}"
-        
+
         results = await conn.fetch(query, session_id)
-        
+
         return [
             {
                 "id": row["id"],
                 "role": row["role"],
                 "content": row["content"],
                 "metadata": json.loads(row["metadata"]),
-                "created_at": row["created_at"].isoformat()
+                "created_at": row["created_at"].isoformat(),
             }
             for row in results
         ]
@@ -271,10 +268,10 @@ async def get_session_messages(
 async def get_document(document_id: str) -> Optional[Dict[str, Any]]:
     """
     Get document by ID.
-    
+
     Args:
         document_id: Document UUID
-    
+
     Returns:
         Document data or None if not found
     """
@@ -292,9 +289,9 @@ async def get_document(document_id: str) -> Optional[Dict[str, Any]]:
             FROM documents
             WHERE id = $1::uuid
             """,
-            document_id
+            document_id,
         )
-        
+
         if result:
             return {
                 "id": result["id"],
@@ -303,25 +300,23 @@ async def get_document(document_id: str) -> Optional[Dict[str, Any]]:
                 "content": result["content"],
                 "metadata": json.loads(result["metadata"]),
                 "created_at": result["created_at"].isoformat(),
-                "updated_at": result["updated_at"].isoformat()
+                "updated_at": result["updated_at"].isoformat(),
             }
-        
+
         return None
 
 
 async def list_documents(
-    limit: int = 100,
-    offset: int = 0,
-    metadata_filter: Optional[Dict[str, Any]] = None
+    limit: int = 100, offset: int = 0, metadata_filter: Optional[Dict[str, Any]] = None
 ) -> List[Dict[str, Any]]:
     """
     List documents with optional filtering.
-    
+
     Args:
         limit: Maximum number of documents to return
         offset: Number of documents to skip
         metadata_filter: Optional metadata filter
-    
+
     Returns:
         List of documents
     """
@@ -338,27 +333,30 @@ async def list_documents(
             FROM documents d
             LEFT JOIN chunks c ON d.id = c.document_id
         """
-        
+
         params = []
         conditions = []
-        
+
         if metadata_filter:
             conditions.append(f"d.metadata @> ${len(params) + 1}::jsonb")
             params.append(json.dumps(metadata_filter))
-        
+
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
-        
+
         query += """
             GROUP BY d.id, d.title, d.source, d.metadata, d.created_at, d.updated_at
             ORDER BY d.created_at DESC
             LIMIT $%d OFFSET $%d
-        """ % (len(params) + 1, len(params) + 2)
-        
+        """ % (
+            len(params) + 1,
+            len(params) + 2,
+        )
+
         params.extend([limit, offset])
-        
+
         results = await conn.fetch(query, *params)
-        
+
         return [
             {
                 "id": row["id"],
@@ -367,7 +365,7 @@ async def list_documents(
                 "metadata": json.loads(row["metadata"]),
                 "created_at": row["created_at"].isoformat(),
                 "updated_at": row["updated_at"].isoformat(),
-                "chunk_count": row["chunk_count"]
+                "chunk_count": row["chunk_count"],
             }
             for row in results
         ]
@@ -375,9 +373,7 @@ async def list_documents(
 
 # Vector Search Functions
 async def vector_search(
-    embedding: List[float],
-    workspace_id: str,
-    limit: int = 10
+    embedding: List[float], workspace_id: str, limit: int = 10
 ) -> List[Dict[str, Any]]:
     """
     Perform vector similarity search within a workspace.
@@ -393,15 +389,15 @@ async def vector_search(
     async with db_pool.acquire() as conn:
         # Convert embedding to PostgreSQL vector string format
         # PostgreSQL vector format: '[1.0,2.0,3.0]' (no spaces after commas)
-        embedding_str = '[' + ','.join(map(str, embedding)) + ']'
-        
+        embedding_str = "[" + ",".join(map(str, embedding)) + "]"
+
         results = await conn.fetch(
             "SELECT * FROM match_chunks($1::vector, $2::uuid, $3)",
             embedding_str,
             workspace_id,
-            limit
+            limit,
         )
-        
+
         return [
             {
                 "chunk_id": row["chunk_id"],
@@ -410,7 +406,7 @@ async def vector_search(
                 "similarity": row["similarity"],
                 "metadata": json.loads(row["metadata"]),
                 "document_title": row["document_title"],
-                "document_source": row["document_source"]
+                "document_source": row["document_source"],
             }
             for row in results
         ]
@@ -421,7 +417,7 @@ async def hybrid_search(
     query_text: str,
     workspace_id: str,
     limit: int = 10,
-    text_weight: float = 0.3
+    text_weight: float = 0.3,
 ) -> List[Dict[str, Any]]:
     """
     Perform hybrid search (vector + keyword) within a workspace.
@@ -439,7 +435,7 @@ async def hybrid_search(
     async with db_pool.acquire() as conn:
         # Convert embedding to PostgreSQL vector string format
         # PostgreSQL vector format: '[1.0,2.0,3.0]' (no spaces after commas)
-        embedding_str = '[' + ','.join(map(str, embedding)) + ']'
+        embedding_str = "[" + ",".join(map(str, embedding)) + "]"
 
         results = await conn.fetch(
             "SELECT * FROM hybrid_search($1::vector, $2, $3::uuid, $4, $5)",
@@ -447,9 +443,9 @@ async def hybrid_search(
             query_text,
             workspace_id,
             limit,
-            text_weight
+            text_weight,
         )
-        
+
         return [
             {
                 "chunk_id": row["chunk_id"],
@@ -460,7 +456,7 @@ async def hybrid_search(
                 "text_similarity": row["text_similarity"],
                 "metadata": json.loads(row["metadata"]),
                 "document_title": row["document_title"],
-                "document_source": row["document_source"]
+                "document_source": row["document_source"],
             }
             for row in results
         ]
@@ -470,25 +466,24 @@ async def hybrid_search(
 async def get_document_chunks(document_id: str) -> List[Dict[str, Any]]:
     """
     Get all chunks for a document.
-    
+
     Args:
         document_id: Document UUID
-    
+
     Returns:
         List of chunks ordered by chunk index
     """
     async with db_pool.acquire() as conn:
         results = await conn.fetch(
-            "SELECT * FROM get_document_chunks($1::uuid)",
-            document_id
+            "SELECT * FROM get_document_chunks($1::uuid)", document_id
         )
-        
+
         return [
             {
                 "chunk_id": row["chunk_id"],
                 "content": row["content"],
                 "chunk_index": row["chunk_index"],
-                "metadata": json.loads(row["metadata"])
+                "metadata": json.loads(row["metadata"]),
             }
             for row in results
         ]
@@ -498,11 +493,11 @@ async def get_document_chunks(document_id: str) -> List[Dict[str, Any]]:
 async def execute_query(query: str, *params) -> List[Dict[str, Any]]:
     """
     Execute a custom query.
-    
+
     Args:
         query: SQL query
         *params: Query parameters
-    
+
     Returns:
         Query results
     """
@@ -531,6 +526,7 @@ async def test_connection() -> bool:
 # Multi-Tenancy Functions
 # ====================
 
+
 # Organization Functions
 async def create_organization(
     name: str,
@@ -540,7 +536,7 @@ async def create_organization(
     contact_name: Optional[str] = None,
     max_workspaces: int = 1,
     max_documents_per_workspace: int = 100,
-    max_monthly_requests: int = 10000
+    max_monthly_requests: int = 10000,
 ) -> str:
     """
     Create a new organization.
@@ -558,8 +554,14 @@ async def create_organization(
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING id::text
             """,
-            name, slug, plan_tier, contact_email, contact_name,
-            max_workspaces, max_documents_per_workspace, max_monthly_requests
+            name,
+            slug,
+            plan_tier,
+            contact_email,
+            contact_name,
+            max_workspaces,
+            max_documents_per_workspace,
+            max_monthly_requests,
         )
         return result["id"]
 
@@ -585,14 +587,14 @@ async def get_organization(org_id: str) -> Optional[Dict[str, Any]]:
             FROM organizations
             WHERE id = $1::uuid
             """,
-            org_id
+            org_id,
         )
 
         if result:
             data = dict(result)
             # Parse JSONB fields
-            if isinstance(data.get('settings'), str):
-                data['settings'] = json.loads(data['settings'])
+            if isinstance(data.get("settings"), str):
+                data["settings"] = json.loads(data["settings"])
             return data
         return None
 
@@ -623,8 +625,8 @@ async def list_organizations() -> List[Dict[str, Any]]:
         for row in results:
             data = dict(row)
             # Parse JSONB fields
-            if isinstance(data.get('settings'), str):
-                data['settings'] = json.loads(data['settings'])
+            if isinstance(data.get("settings"), str):
+                data["settings"] = json.loads(data["settings"])
             organizations.append(data)
         return organizations
 
@@ -635,7 +637,7 @@ async def create_workspace(
     name: str,
     slug: str,
     description: Optional[str] = None,
-    settings: Optional[Dict[str, Any]] = None
+    settings: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     Create a new workspace.
@@ -650,7 +652,11 @@ async def create_workspace(
             VALUES ($1::uuid, $2, $3, $4, $5)
             RETURNING id::text
             """,
-            organization_id, name, slug, description, json.dumps(settings or {})
+            organization_id,
+            name,
+            slug,
+            description,
+            json.dumps(settings or {}),
         )
         return result["id"]
 
@@ -675,7 +681,7 @@ async def get_workspace(workspace_id: str) -> Optional[Dict[str, Any]]:
             FROM workspaces
             WHERE id = $1::uuid
             """,
-            workspace_id
+            workspace_id,
         )
 
         if result:
@@ -706,7 +712,7 @@ async def list_workspaces(organization_id: str) -> List[Dict[str, Any]]:
             WHERE organization_id = $1::uuid
             ORDER BY created_at DESC
             """,
-            organization_id
+            organization_id,
         )
         workspaces = []
         for row in results:
@@ -725,7 +731,7 @@ async def increment_workspace_requests(workspace_id: str):
             SET monthly_requests = monthly_requests + 1
             WHERE id = $1::uuid
             """,
-            workspace_id
+            workspace_id,
         )
 
 
@@ -741,7 +747,7 @@ async def create_agent(
     temperature: float = 0.7,
     max_tokens: Optional[int] = None,
     enabled_tools: Optional[List[str]] = None,
-    tool_config: Optional[Dict[str, Any]] = None
+    tool_config: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     Create a new agent.
@@ -760,10 +766,17 @@ async def create_agent(
             VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING id::text
             """,
-            workspace_id, name, slug, description, system_prompt,
-            model_provider, model_name, temperature, max_tokens,
+            workspace_id,
+            name,
+            slug,
+            description,
+            system_prompt,
+            model_provider,
+            model_name,
+            temperature,
+            max_tokens,
             json.dumps(enabled_tools or []),
-            json.dumps(tool_config or {})
+            json.dumps(tool_config or {}),
         )
         return result["id"]
 
@@ -793,7 +806,7 @@ async def get_agent(agent_id: str) -> Optional[Dict[str, Any]]:
             FROM agents
             WHERE id = $1::uuid
             """,
-            agent_id
+            agent_id,
         )
 
         if result:
@@ -805,7 +818,9 @@ async def get_agent(agent_id: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-async def list_agents(workspace_id: str, include_inactive: bool = False) -> List[Dict[str, Any]]:
+async def list_agents(
+    workspace_id: str, include_inactive: bool = False
+) -> List[Dict[str, Any]]:
     """List all agents for a workspace."""
     async with db_pool.acquire() as conn:
         query = """
@@ -846,10 +861,7 @@ async def list_agents(workspace_id: str, include_inactive: bool = False) -> List
         return agents
 
 
-async def update_agent(
-    agent_id: str,
-    updates: Dict[str, Any]
-) -> bool:
+async def update_agent(agent_id: str, updates: Dict[str, Any]) -> bool:
     """Update agent fields."""
     if not updates:
         return False
@@ -877,7 +889,7 @@ async def update_agent(
             SET {', '.join(set_clauses)}
             WHERE id = ${param_idx}::uuid
             """,
-            *params
+            *params,
         )
         return result != "UPDATE 0"
 
@@ -885,10 +897,7 @@ async def update_agent(
 async def delete_agent(agent_id: str) -> bool:
     """Delete an agent."""
     async with db_pool.acquire() as conn:
-        result = await conn.execute(
-            "DELETE FROM agents WHERE id = $1::uuid",
-            agent_id
-        )
+        result = await conn.execute("DELETE FROM agents WHERE id = $1::uuid", agent_id)
         return result != "DELETE 0"
 
 
@@ -900,7 +909,7 @@ async def create_api_key(
     key_hash: str,
     scopes: List[str],
     rate_limit_per_minute: int = 60,
-    expires_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None,
 ) -> str:
     """
     Create a new API key.
@@ -918,8 +927,13 @@ async def create_api_key(
             VALUES ($1::uuid, $2, $3, $4, $5, $6, $7)
             RETURNING id::text
             """,
-            workspace_id, name, key_prefix, key_hash,
-            json.dumps(scopes), rate_limit_per_minute, expires_at
+            workspace_id,
+            name,
+            key_prefix,
+            key_hash,
+            json.dumps(scopes),
+            rate_limit_per_minute,
+            expires_at,
         )
         return result["id"]
 
@@ -948,7 +962,7 @@ async def get_api_key_by_prefix(key_prefix: str) -> Optional[Dict[str, Any]]:
               AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
               AND revoked_at IS NULL
             """,
-            key_prefix
+            key_prefix,
         )
 
         if result:
@@ -967,7 +981,7 @@ async def update_api_key_last_used(api_key_id: str):
             SET last_used_at = CURRENT_TIMESTAMP
             WHERE id = $1::uuid
             """,
-            api_key_id
+            api_key_id,
         )
 
 
@@ -980,7 +994,7 @@ async def revoke_api_key(api_key_id: str) -> bool:
             SET is_active = false, revoked_at = CURRENT_TIMESTAMP
             WHERE id = $1::uuid
             """,
-            api_key_id
+            api_key_id,
         )
         return result != "UPDATE 0"
 
@@ -1006,7 +1020,7 @@ async def list_api_keys(workspace_id: str) -> List[Dict[str, Any]]:
             WHERE workspace_id = $1::uuid
             ORDER BY created_at DESC
             """,
-            workspace_id
+            workspace_id,
         )
 
         api_keys = []

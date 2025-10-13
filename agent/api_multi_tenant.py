@@ -23,7 +23,7 @@ from .models import (
     CreateAPIKeyRequest,
     CreateAPIKeyResponse,
     MultiTenantChatRequest,
-    ChatResponse
+    ChatResponse,
 )
 from .db_utils import (
     create_organization,
@@ -38,7 +38,7 @@ from .db_utils import (
     delete_agent,
     create_api_key,
     revoke_api_key,
-    increment_workspace_requests
+    increment_workspace_requests,
 )
 
 logger = logging.getLogger(__name__)
@@ -50,6 +50,7 @@ router = APIRouter(prefix="/v1", tags=["multi-tenant"])
 # ====================
 # Helper Functions
 # ====================
+
 
 def generate_api_key() -> tuple[str, str, str]:
     """
@@ -80,10 +81,9 @@ def verify_api_key_hash(full_key: str, stored_hash: str) -> bool:
 # Organization Endpoints
 # ====================
 
+
 @router.post("/organizations", response_model=Organization)
-async def create_organization_endpoint(
-    request: CreateOrganizationRequest
-):
+async def create_organization_endpoint(request: CreateOrganizationRequest):
     """Create a new organization."""
     try:
         org_id = await create_organization(
@@ -91,7 +91,7 @@ async def create_organization_endpoint(
             slug=request.slug,
             plan_tier=request.plan_tier,
             contact_email=request.contact_email,
-            contact_name=request.contact_name
+            contact_name=request.contact_name,
         )
 
         org = await get_organization(org_id)
@@ -119,6 +119,7 @@ async def get_organization_endpoint(org_id: str):
 async def list_organizations_endpoint():
     """List all organizations."""
     from .db_utils import list_organizations
+
     orgs = await list_organizations()
     return [Organization(**org) for org in orgs]
 
@@ -127,11 +128,9 @@ async def list_organizations_endpoint():
 # Workspace Endpoints
 # ====================
 
+
 @router.post("/organizations/{org_id}/workspaces", response_model=Workspace)
-async def create_workspace_endpoint(
-    org_id: str,
-    request: CreateWorkspaceRequest
-):
+async def create_workspace_endpoint(org_id: str, request: CreateWorkspaceRequest):
     """Create a new workspace within an organization."""
     try:
         # Verify organization exists
@@ -144,7 +143,7 @@ async def create_workspace_endpoint(
             name=request.name,
             slug=request.slug,
             description=request.description,
-            settings=request.settings
+            settings=request.settings,
         )
 
         workspace = await get_workspace(workspace_id)
@@ -184,11 +183,9 @@ async def list_workspaces_endpoint(org_id: str):
 # Agent Endpoints
 # ====================
 
+
 @router.post("/workspaces/{workspace_id}/agents", response_model=Agent)
-async def create_agent_endpoint(
-    workspace_id: str,
-    request: CreateAgentRequest
-):
+async def create_agent_endpoint(workspace_id: str, request: CreateAgentRequest):
     """Create a new agent within a workspace."""
     try:
         # Verify workspace exists
@@ -207,7 +204,7 @@ async def create_agent_endpoint(
             temperature=request.temperature,
             max_tokens=request.max_tokens,
             enabled_tools=request.enabled_tools,
-            tool_config=request.tool_config
+            tool_config=request.tool_config,
         )
 
         agent = await get_agent(agent_id)
@@ -222,10 +219,7 @@ async def create_agent_endpoint(
 
 
 @router.get("/workspaces/{workspace_id}/agents", response_model=List[Agent])
-async def list_agents_endpoint(
-    workspace_id: str,
-    include_inactive: bool = False
-):
+async def list_agents_endpoint(workspace_id: str, include_inactive: bool = False):
     """List all agents for a workspace."""
     # Verify workspace exists
     workspace = await get_workspace(workspace_id)
@@ -237,10 +231,7 @@ async def list_agents_endpoint(
 
 
 @router.get("/workspaces/{workspace_id}/agents/{agent_id}", response_model=Agent)
-async def get_agent_endpoint(
-    workspace_id: str,
-    agent_id: str
-):
+async def get_agent_endpoint(workspace_id: str, agent_id: str):
     """Get agent by ID."""
     agent = await get_agent(agent_id)
     if not agent:
@@ -255,9 +246,7 @@ async def get_agent_endpoint(
 
 @router.patch("/workspaces/{workspace_id}/agents/{agent_id}", response_model=Agent)
 async def update_agent_endpoint(
-    workspace_id: str,
-    agent_id: str,
-    request: UpdateAgentRequest
+    workspace_id: str, agent_id: str, request: UpdateAgentRequest
 ):
     """Update an agent."""
     # Verify agent exists and belongs to workspace
@@ -270,8 +259,7 @@ async def update_agent_endpoint(
 
     # Build updates dict from request (only include non-None values)
     updates = {
-        k: v for k, v in request.dict(exclude_unset=True).items()
-        if v is not None
+        k: v for k, v in request.dict(exclude_unset=True).items() if v is not None
     }
 
     if not updates:
@@ -289,10 +277,7 @@ async def update_agent_endpoint(
 
 
 @router.delete("/workspaces/{workspace_id}/agents/{agent_id}")
-async def delete_agent_endpoint(
-    workspace_id: str,
-    agent_id: str
-):
+async def delete_agent_endpoint(workspace_id: str, agent_id: str):
     """Delete an agent."""
     # Verify agent exists and belongs to workspace
     agent = await get_agent(agent_id)
@@ -313,11 +298,9 @@ async def delete_agent_endpoint(
 # API Key Endpoints
 # ====================
 
+
 @router.post("/workspaces/{workspace_id}/api-keys", response_model=CreateAPIKeyResponse)
-async def create_api_key_endpoint(
-    workspace_id: str,
-    request: CreateAPIKeyRequest
-):
+async def create_api_key_endpoint(workspace_id: str, request: CreateAPIKeyRequest):
     """
     Create a new API key for a workspace.
 
@@ -341,7 +324,7 @@ async def create_api_key_endpoint(
             key_hash=key_hash,
             scopes=request.scopes,
             rate_limit_per_minute=request.rate_limit_per_minute,
-            expires_at=request.expires_at
+            expires_at=request.expires_at,
         )
 
         return CreateAPIKeyResponse(
@@ -350,7 +333,7 @@ async def create_api_key_endpoint(
             key=full_key,  # Only time full key is shown
             key_prefix=key_prefix,
             workspace_id=UUID(workspace_id),
-            created_at=datetime.utcnow()
+            created_at=datetime.utcnow(),
         )
 
     except Exception as e:
@@ -379,10 +362,7 @@ async def list_api_keys_endpoint(workspace_id: str):
 
 
 @router.delete("/workspaces/{workspace_id}/api-keys/{key_id}")
-async def revoke_api_key_endpoint(
-    workspace_id: str,
-    key_id: str
-):
+async def revoke_api_key_endpoint(workspace_id: str, key_id: str):
     """Revoke an API key."""
     # TODO: Verify key belongs to workspace
     success = await revoke_api_key(key_id)
@@ -396,12 +376,9 @@ async def revoke_api_key_endpoint(
 # Document Management Endpoints
 # ====================
 
+
 @router.get("/workspaces/{workspace_id}/documents")
-async def list_documents_endpoint(
-    workspace_id: str,
-    limit: int = 100,
-    offset: int = 0
-):
+async def list_documents_endpoint(workspace_id: str, limit: int = 100, offset: int = 0):
     """List all documents in a workspace."""
     # Verify workspace exists
     workspace = await get_workspace(workspace_id)
@@ -427,30 +404,26 @@ async def list_documents_endpoint(
             """,
             workspace_id,
             limit,
-            offset
+            offset,
         )
 
         documents = [dict(row) for row in rows]
 
         # Get total count
         total = await conn.fetchval(
-            "SELECT COUNT(*) FROM documents WHERE workspace_id = $1::uuid",
-            workspace_id
+            "SELECT COUNT(*) FROM documents WHERE workspace_id = $1::uuid", workspace_id
         )
 
         return {
             "documents": documents,
             "total": total,
             "limit": limit,
-            "offset": offset
+            "offset": offset,
         }
 
 
 @router.get("/workspaces/{workspace_id}/documents/{document_id}")
-async def get_document_endpoint(
-    workspace_id: str,
-    document_id: str
-):
+async def get_document_endpoint(workspace_id: str, document_id: str):
     """Get a specific document by ID."""
     # Verify workspace exists
     workspace = await get_workspace(workspace_id)
@@ -474,7 +447,7 @@ async def get_document_endpoint(
             WHERE id = $1::uuid AND workspace_id = $2::uuid
             """,
             document_id,
-            workspace_id
+            workspace_id,
         )
 
         if not row:
@@ -484,10 +457,7 @@ async def get_document_endpoint(
 
 
 @router.delete("/workspaces/{workspace_id}/documents/{document_id}")
-async def delete_document_endpoint(
-    workspace_id: str,
-    document_id: str
-):
+async def delete_document_endpoint(workspace_id: str, document_id: str):
     """
     Delete a document and all its associated chunks.
 
@@ -505,7 +475,7 @@ async def delete_document_endpoint(
         doc = await conn.fetchrow(
             "SELECT id FROM documents WHERE id = $1::uuid AND workspace_id = $2::uuid",
             document_id,
-            workspace_id
+            workspace_id,
         )
 
         if not doc:
@@ -513,31 +483,28 @@ async def delete_document_endpoint(
 
         # Count chunks before deletion
         chunks_count = await conn.fetchval(
-            "SELECT COUNT(*) FROM chunks WHERE document_id = $1::uuid",
-            document_id
+            "SELECT COUNT(*) FROM chunks WHERE document_id = $1::uuid", document_id
         )
 
         # Delete chunks first (foreign key constraint)
         await conn.execute(
-            "DELETE FROM chunks WHERE document_id = $1::uuid",
-            document_id
+            "DELETE FROM chunks WHERE document_id = $1::uuid", document_id
         )
 
         # Delete document (trigger will update workspace document_count)
-        await conn.execute(
-            "DELETE FROM documents WHERE id = $1::uuid",
-            document_id
-        )
+        await conn.execute("DELETE FROM documents WHERE id = $1::uuid", document_id)
 
         chunks_deleted = chunks_count
 
-        logger.info(f"Deleted document {document_id} and {chunks_deleted} chunks from workspace {workspace_id}")
+        logger.info(
+            f"Deleted document {document_id} and {chunks_deleted} chunks from workspace {workspace_id}"
+        )
 
         return {
             "status": "success",
             "message": "Document deleted",
             "document_id": document_id,
-            "chunks_deleted": chunks_deleted or 0
+            "chunks_deleted": chunks_deleted or 0,
         }
 
 
@@ -545,11 +512,12 @@ async def delete_document_endpoint(
 # Multi-Tenant Chat Endpoint
 # ====================
 
+
 @router.post("/workspaces/{workspace_id}/chat", response_model=ChatResponse)
 async def workspace_chat_endpoint(
     workspace_id: str,
     request: MultiTenantChatRequest,
-    authorization: Optional[str] = Header(None)
+    authorization: Optional[str] = Header(None),
 ):
     """
     Chat with an agent in a workspace.
@@ -581,18 +549,18 @@ async def workspace_chat_endpoint(
 
     # TODO: Implement actual chat logic with workspace-aware agent
     # For now, return placeholder
-    raise HTTPException(501, "Multi-tenant chat not yet implemented. Need to integrate with agent system.")
+    raise HTTPException(
+        501,
+        "Multi-tenant chat not yet implemented. Need to integrate with agent system.",
+    )
 
 
 # ====================
 # Health Check
 # ====================
 
+
 @router.get("/health")
 async def health_check():
     """Health check endpoint."""
-    return {
-        "status": "healthy",
-        "multi_tenant": True,
-        "version": "1.0.0"
-    }
+    return {"status": "healthy", "multi_tenant": True, "version": "1.0.0"}
