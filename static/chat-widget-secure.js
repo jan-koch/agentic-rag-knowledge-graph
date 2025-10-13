@@ -5,7 +5,12 @@
  * <script>
  *   window.RAG_CHAT_CONFIG = {
  *     apiKey: 'your-workspace-api-key',
- *     apiUrl: 'https://botapi.kobra-dataworks.de'
+ *     apiUrl: 'https://botapi.kobra-dataworks.de',
+ *     agentName: 'Custom Bot Name',  // Optional: Override the agent name from database
+ *     greeting: 'Hello! How can I help?',  // Optional: Custom greeting message
+ *     language: 'de',  // Optional: 'en' or 'de' (default: 'de')
+ *     primaryColor: '#667eea',  // Optional: Custom primary color
+ *     position: 'bottom-right'  // Optional: 'bottom-right', 'bottom-left', etc.
  *   };
  * </script>
  * <script src="https://botapi.kobra-dataworks.de/static/chat-widget-secure.js"></script>
@@ -24,6 +29,7 @@
     const primaryColor = config.primaryColor || '#667eea';
     const position = config.position || 'bottom-right';
     const language = config.language || 'de'; // 'en' or 'de'
+    const customAgentName = config.agentName || null; // Optional agent name override
 
     // Translations
     const translations = {
@@ -80,7 +86,8 @@
 
             workspaceId = data.workspace_id;
             agentId = data.agent_id;
-            agentName = data.agent_name || 'Support Bot';
+            // Use custom agent name from config if provided, otherwise use database value
+            agentName = customAgentName || data.agent_name || 'Support Bot';
             isValidated = true;
 
             return true;
@@ -204,10 +211,12 @@
         iframe.id = 'rag-chat-iframe';
 
         // Get greeting and language from config
-        const greeting = config.greeting || `Hi! I'm ${agentName}. How can I help?`;
+        // If custom agent name is provided, use it in the default greeting
+        const displayName = customAgentName || agentName;
+        const greeting = config.greeting || `Hi! I'm ${displayName}. How can I help?`;
         const widgetLanguage = config.language || language || 'de';
 
-        iframe.src = `${apiUrl}/widget/chat?workspace_id=${workspaceId}&agent_id=${agentId}&agent_name=${encodeURIComponent(agentName)}&api_url=${encodeURIComponent(apiUrl)}&greeting=${encodeURIComponent(greeting)}&language=${widgetLanguage}`;
+        iframe.src = `${apiUrl}/widget/chat?workspace_id=${workspaceId}&agent_id=${agentId}&agent_name=${encodeURIComponent(displayName)}&api_url=${encodeURIComponent(apiUrl)}&greeting=${encodeURIComponent(greeting)}&language=${widgetLanguage}`;
         iframe.style.cssText = 'width: 100%; height: 100%; border: none;';
         iframe.allow = 'clipboard-write';
 
