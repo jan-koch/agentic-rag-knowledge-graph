@@ -525,7 +525,7 @@ async def main():
     )
 
     def progress_callback(current: int, total: int):
-        print(f"Progress: {current}/{total} documents processed")
+        logger.info(f"Progress: {current}/{total} documents processed")
 
     try:
         start_time = datetime.now()
@@ -536,30 +536,34 @@ async def main():
         total_time = (end_time - start_time).total_seconds()
 
         # Print summary
-        print("\n" + "=" * 50)
-        print("INGESTION SUMMARY")
-        print("=" * 50)
-        print(f"Documents processed: {len(results)}")
-        print(f"Total chunks created: {sum(r.chunks_created for r in results)}")
-        print(f"Total entities extracted: {sum(r.entities_extracted for r in results)}")
-        print(f"Total graph episodes: {sum(r.relationships_created for r in results)}")
-        print(f"Total errors: {sum(len(r.errors) for r in results)}")
-        print(f"Total processing time: {total_time:.2f} seconds")
-        print()
+        logger.info("\n" + "=" * 50)
+        logger.info("INGESTION SUMMARY")
+        logger.info("=" * 50)
+        logger.info(f"Documents processed: {len(results)}")
+        logger.info(f"Total chunks created: {sum(r.chunks_created for r in results)}")
+        logger.info(
+            f"Total entities extracted: {sum(r.entities_extracted for r in results)}"
+        )
+        logger.info(
+            f"Total graph episodes: {sum(r.relationships_created for r in results)}"
+        )
+        logger.info(f"Total errors: {sum(len(r.errors) for r in results)}")
+        logger.info(f"Total processing time: {total_time:.2f} seconds")
+        logger.info("")
 
         # Print individual results
         for result in results:
             status = "✓" if not result.errors else "✗"
-            print(
+            logger.info(
                 f"{status} {result.title}: {result.chunks_created} chunks, {result.entities_extracted} entities"
             )
 
             if result.errors:
                 for error in result.errors:
-                    print(f"  Error: {error}")
+                    logger.error(f"  Error: {error}")
 
     except KeyboardInterrupt:
-        print("\nIngestion interrupted by user")
+        logger.info("\nIngestion interrupted by user")
     except Exception as e:
         logger.error(f"Ingestion failed: {e}")
         raise

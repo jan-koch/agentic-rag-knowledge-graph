@@ -534,13 +534,13 @@ async def main():
         content=sample_text, title="AI Company Developments", source="example.md"
     )
 
-    print(f"Created {len(chunks)} chunks")
+    logger.info(f"Created {len(chunks)} chunks")
 
     # Extract entities
     enriched_chunks = await graph_builder.extract_entities_from_chunks(chunks)
 
     for i, chunk in enumerate(enriched_chunks):
-        print(f"Chunk {i}: {chunk.metadata.get('entities', {})}")
+        logger.info(f"Chunk {i}: {chunk.metadata.get('entities', {})}")
 
     # Add to knowledge graph
     try:
@@ -551,10 +551,10 @@ async def main():
             document_metadata={"topic": "AI", "date": "2024"},
         )
 
-        print(f"Graph building result: {result}")
+        logger.info(f"Graph building result: {result}")
 
     except Exception as e:
-        print(f"Graph building failed: {e}")
+        logger.error(f"Graph building failed: {e}")
 
     finally:
         await graph_builder.close()

@@ -523,10 +523,10 @@ async def main():
     )
 
     for i, chunk in enumerate(chunks):
-        print(f"Chunk {i}: {len(chunk.content)} chars")
-        print(f"Content: {chunk.content[:100]}...")
-        print(f"Metadata: {chunk.metadata}")
-        print("---")
+        logger.debug(f"Chunk {i}: {len(chunk.content)} chars")
+        logger.debug(f"Content: {chunk.content[:100]}...")
+        logger.debug(f"Metadata: {chunk.metadata}")
+        logger.debug("---")
 
 
 if __name__ == "__main__":

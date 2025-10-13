@@ -389,22 +389,22 @@ async def main():
         content=sample_text, title="AI Initiatives", source="example.md"
     )
 
-    print(f"Created {len(chunks)} chunks")
+    logger.info(f"Created {len(chunks)} chunks")
 
     # Generate embeddings
     def progress_callback(current, total):
-        print(f"Processing batch {current}/{total}")
+        logger.info(f"Processing batch {current}/{total}")
 
     embedded_chunks = await embedder.embed_chunks(chunks, progress_callback)
 
     for i, chunk in enumerate(embedded_chunks):
-        print(
+        logger.info(
             f"Chunk {i}: {len(chunk.content)} chars, embedding dim: {len(chunk.embedding)}"
         )
 
     # Test query embedding
     query_embedding = await embedder.embed_query("Google AI research")
-    print(f"Query embedding dimension: {len(query_embedding)}")
+    logger.info(f"Query embedding dimension: {len(query_embedding)}")
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@ Flexible provider configuration for LLM and embedding models.
 """
 
 import os
+import logging
 from typing import Optional
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.models.openai import OpenAIModel
@@ -11,6 +12,8 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 def get_llm_model(model_choice: Optional[str] = None) -> OpenAIModel:
@@ -101,7 +104,9 @@ def validate_configuration() -> bool:
             missing_vars.append(var)
 
     if missing_vars:
-        print(f"Missing required environment variables: {', '.join(missing_vars)}")
+        logger.error(
+            f"Missing required environment variables: {', '.join(missing_vars)}"
+        )
         return False
 
     return True
