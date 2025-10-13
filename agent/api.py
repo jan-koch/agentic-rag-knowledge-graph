@@ -3,7 +3,6 @@ FastAPI endpoints for the agentic RAG system.
 """
 
 import os
-import asyncio
 import json
 import logging
 import hashlib
@@ -24,7 +23,6 @@ from .security import (
     verify_n8n_api_key,
     verify_api_key,
     sanitize_input,
-    get_security_info,
     SecurityError,
     security_headers_middleware
 )
@@ -45,7 +43,6 @@ from .models import (
     ChatResponse,
     SearchRequest,
     SearchResponse,
-    StreamDelta,
     ErrorResponse,
     HealthStatus,
     ToolCall,
@@ -161,7 +158,7 @@ async def add_security_headers(request: Request, call_next):
 
 
 # Include multi-tenant API router
-from .api_multi_tenant import router as multi_tenant_router
+from .api_multi_tenant import router as multi_tenant_router  # noqa: E402
 app.include_router(multi_tenant_router)
 
 
@@ -256,7 +253,7 @@ def extract_tool_calls(result) -> List[ToolCall]:
                                 try:
                                     tool_args = part.args_as_dict()
                                     logger.debug(f"Got args from args_as_dict(): {tool_args}")
-                                except:
+                                except Exception:
                                     pass
                             
                             # Get tool call ID

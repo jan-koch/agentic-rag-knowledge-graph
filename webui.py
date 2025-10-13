@@ -97,7 +97,7 @@ def format_datetime(dt_str: str) -> str:
     try:
         dt = datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
         return dt.strftime("%Y-%m-%d %H:%M:%S")
-    except:
+    except (ValueError, AttributeError):
         return dt_str
 
 
@@ -460,7 +460,7 @@ elif page == "🏢 Organizations":
                         **Created:** {format_datetime(org['created_at'])}
                         """)
 
-                    if st.button(f"Copy ID", key=f"copy_org_{org['id']}", help="Click to copy organization ID"):
+                    if st.button("Copy ID", key=f"copy_org_{org['id']}", help="Click to copy organization ID"):
                         st.code(org['id'], language=None)
         else:
             st.info("No organizations found. Create one above!")
@@ -600,7 +600,7 @@ elif page == "📁 Workspaces":
                             # Check if workspace has been recently updated
                             updated_at = ws.get('updated_at')
                             if updated_at:
-                                from datetime import datetime, timedelta
+                                from datetime import datetime
                                 try:
                                     updated = datetime.fromisoformat(updated_at.replace('Z', '+00:00'))
                                     now = datetime.now(updated.tzinfo)
@@ -616,14 +616,14 @@ elif page == "📁 Workspaces":
                                         days = int(hours_since_update / 24)
                                         st.warning("⚪ Idle")
                                         st.caption(f"{days}d ago")
-                                except:
+                                except (ValueError, AttributeError, TypeError):
                                     st.caption("Unknown")
                             else:
                                 st.caption("No activity")
 
                         # Show workspace details in a collapsible section
                         with st.container():
-                            if st.checkbox(f"Show details", key=f"details_{ws['id']}"):
+                            if st.checkbox("Show details", key=f"details_{ws['id']}"):
                                 detail_col1, detail_col2 = st.columns(2)
 
                                 with detail_col1:
@@ -1242,7 +1242,7 @@ elif page == "🔌 Widget Embed":
             """)
 
         with st.expander("🔧 JavaScript API"):
-            st.markdown(f"""
+            st.markdown("""
             **Control the widget programmatically:**
 
             ```javascript
@@ -1256,9 +1256,9 @@ elif page == "🔌 Widget Embed":
             window.RagChatWidget.toggle();
 
             // Check if widget is open
-            if (window.RagChatWidget.isOpen()) {{
+            if (window.RagChatWidget.isOpen()) {
                 console.log('Widget is open');
-            }}
+            }
 
             // Reload the widget
             window.RagChatWidget.reload();

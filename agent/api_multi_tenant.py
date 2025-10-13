@@ -2,16 +2,14 @@
 Multi-tenant API endpoints for workspace and agent management.
 """
 
-import os
 import logging
 import hashlib
 import secrets
-from typing import List, Dict, Any, Optional
+from typing import List, Optional
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Header, Depends
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Header
 
 from .models import (
     Organization,
@@ -39,8 +37,6 @@ from .db_utils import (
     update_agent,
     delete_agent,
     create_api_key,
-    get_api_key_by_prefix,
-    update_api_key_last_used,
     revoke_api_key,
     increment_workspace_requests
 )
@@ -63,7 +59,6 @@ def generate_api_key() -> tuple[str, str, str]:
         Tuple of (full_key, key_prefix, key_hash)
     """
     # Generate random key
-    random_bytes = secrets.token_bytes(32)
     full_key = f"apikey_live_{secrets.token_urlsafe(32)}"
 
     # Create prefix (first 15 chars for lookup)
