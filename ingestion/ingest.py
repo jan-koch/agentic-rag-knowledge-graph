@@ -7,12 +7,10 @@ import asyncio
 import logging
 import json
 import glob
-from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import argparse
 
-import asyncpg
 from dotenv import load_dotenv
 
 from .chunker import ChunkingConfig, create_chunker, DocumentChunk
