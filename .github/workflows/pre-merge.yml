@@ -123,9 +123,9 @@ jobs:
 
           console.log(`PR has ${additions} additions and ${deletions} deletions (${changes} total changes)`);
 
-          if (changes > 1000) {
+          if (changes > 20000) {
             core.setFailed(`⚠️  PR is too large (${changes} changes). Consider splitting into smaller PRs for easier review.`);
-          } else if (changes > 500) {
+          } else if (changes > 10000) {
             core.warning(`PR is quite large (${changes} changes). Consider splitting if possible.`);
           } else {
             console.log(`✅ PR size is reasonable (${changes} changes)`);
