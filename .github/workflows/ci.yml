@@ -95,7 +95,9 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: coverage-${{ matrix.python-version }}
-        path: coverage.xml
+        path: |
+          coverage.xml
+          .coverage
         retention-days: 7
 
   lint:
@@ -152,6 +154,7 @@ jobs:
     - name: Check coverage threshold
       run: |
         pip install coverage
+        # Use the .coverage database file for reporting
         coverage report --fail-under=20
 
   security:
