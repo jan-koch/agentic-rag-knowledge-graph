@@ -9,9 +9,7 @@ import json
 import asyncio
 import aiohttp
 import argparse
-import os
 from typing import Dict, Any, List
-from datetime import datetime
 import sys
 
 # ANSI color codes for better formatting
@@ -43,8 +41,8 @@ class AgenticRAGCLI:
         print("🤖 Agentic RAG with Knowledge Graph CLI")
         print("=" * 60)
         print(f"{Colors.WHITE}Connected to: {self.base_url}")
-        print(f"Type 'exit', 'quit', or Ctrl+C to exit")
-        print(f"Type 'help' for commands")
+        print("Type 'exit', 'quit', or Ctrl+C to exit")
+        print("Type 'help' for commands")
         print("=" * 60 + f"{Colors.END}\n")
     
     def print_help(self):

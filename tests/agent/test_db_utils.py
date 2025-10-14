@@ -3,7 +3,6 @@ Tests for database utilities.
 """
 
 import pytest
-import asyncio
 import json
 from unittest.mock import Mock, AsyncMock, patch
 from datetime import datetime, timezone, timedelta
@@ -24,9 +23,10 @@ from agent.db_utils import (
 )
 
 
+@pytest.mark.integration
 class TestDatabasePool:
     """Test database pool management."""
-    
+
     def test_init_with_url(self):
         """Test initialization with database URL."""
         url = "postgresql://user:pass@host:5432/db"

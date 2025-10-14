@@ -3,7 +3,7 @@ Tests for document chunking functionality.
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import AsyncMock, patch
 
 from ingestion.chunker import (
     ChunkingConfig,
