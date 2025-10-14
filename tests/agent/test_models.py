@@ -4,7 +4,6 @@ Tests for Pydantic models.
 
 import pytest
 from datetime import datetime
-from uuid import uuid4
 
 from agent.models import (
     ChatRequest,

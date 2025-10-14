@@ -10,7 +10,6 @@ Usage:
 import argparse
 import asyncio
 import sys
-import os
 from pathlib import Path
 
 # Add parent directory to path for imports
@@ -41,10 +40,10 @@ async def ingest_for_workspace(workspace_id: str, directory: str = None, file_pa
         print(f"📄 Source file: {file_path}")
     else:
         source = "documents"
-        print(f"📁 Using default directory: documents/")
+        print("📁 Using default directory: documents/")
 
     if clean:
-        print(f"🧹 Clean mode: Will remove existing workspace data first")
+        print("🧹 Clean mode: Will remove existing workspace data first")
 
     print()
 

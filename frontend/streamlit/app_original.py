@@ -6,12 +6,8 @@ Modern Streamlit Chat Application for Agentic RAG System (German UI)
 import streamlit as st
 import requests
 import json
-import time
 from datetime import datetime
 from typing import Dict, List, Optional, Any
-import uuid
-import os
-from pathlib import Path
 
 # Konfiguration
 st.set_page_config(
@@ -934,31 +930,31 @@ def test_api_connection(api_url: str, api_key: str) -> Dict[str, Any]:
         elif response.status_code == 401:
             return {
                 "status": "error",
-                "message": f"Authentifizierung fehlgeschlagen (HTTP 401) - Prüfen Sie den API-Schlüssel",
+                "message": "Authentifizierung fehlgeschlagen (HTTP 401) - Prüfen Sie den API-Schlüssel",
                 "data": {"status_code": 401, "url": test_url}
             }
         elif response.status_code == 403:
             return {
                 "status": "error", 
-                "message": f"Zugriff verweigert (HTTP 403) - API-Schlüssel ungültig",
+                "message": "Zugriff verweigert (HTTP 403) - API-Schlüssel ungültig",
                 "data": {"status_code": 403, "url": test_url}
             }
         elif response.status_code == 502:
             return {
                 "status": "error",
-                "message": f"Server temporär nicht verfügbar (HTTP 502) - Riddly Server ist offline oder wird gewartet",
+                "message": "Server temporär nicht verfügbar (HTTP 502) - Riddly Server ist offline oder wird gewartet",
                 "data": {"status_code": 502, "url": test_url, "info": "Bad Gateway - Der Server ist möglicherweise offline"}
             }
         elif response.status_code == 503:
             return {
                 "status": "error",
-                "message": f"Service nicht verfügbar (HTTP 503) - Server überlastet oder in Wartung",
+                "message": "Service nicht verfügbar (HTTP 503) - Server überlastet oder in Wartung",
                 "data": {"status_code": 503, "url": test_url}
             }
         elif response.status_code == 504:
             return {
                 "status": "error",
-                "message": f"Gateway Timeout (HTTP 504) - Server antwortet zu langsam",
+                "message": "Gateway Timeout (HTTP 504) - Server antwortet zu langsam",
                 "data": {"status_code": 504, "url": test_url}
             }
         else:
@@ -974,10 +970,10 @@ def test_api_connection(api_url: str, api_key: str) -> Dict[str, Any]:
             "message": f"SSL-Zertifikatsfehler: {str(e)[:100]}",
             "data": None
         }
-    except requests.exceptions.ConnectTimeout as e:
+    except requests.exceptions.ConnectTimeout:
         return {
             "status": "error",
-            "message": f"Verbindungs-Timeout (15s überschritten)",
+            "message": "Verbindungs-Timeout (15s überschritten)",
             "data": None
         }
     except requests.exceptions.ConnectionError as e:
@@ -1417,7 +1413,7 @@ def main():
             st.markdown(f'<span class="status-disconnected">{TEXTS["sidebar"]["disconnected"]}</span>', 
                        unsafe_allow_html=True)
         else:
-            st.markdown(f'<span class="status-warning">Unbekannt</span>', 
+            st.markdown('<span class="status-warning">Unbekannt</span>', 
                        unsafe_allow_html=True)
         
         st.divider()
