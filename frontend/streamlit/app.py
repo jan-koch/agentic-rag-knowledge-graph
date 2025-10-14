@@ -6,9 +6,8 @@ Clean, modern ChatGPT-style interface using Tailwind utility classes
 import streamlit as st
 import requests
 import json
-import time
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Dict, Optional, Any
 import uuid
 
 # Page Configuration
@@ -160,7 +159,7 @@ def test_connection(api_url: str, api_key: str) -> bool:
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         response = requests.get(f"{api_url.rstrip('/')}/health", headers=headers, timeout=5)
         return response.status_code == 200
-    except:
+    except Exception:
         return False
 
 def send_message(message: str, api_url: str, api_key: str, search_type: str, session_id: Optional[str]) -> Dict[str, Any]:
@@ -204,9 +203,9 @@ def send_streaming_message(message: str, api_url: str, api_key: str, search_type
             stream=True,
             timeout=30
         )
-        
+
         return response if response.status_code == 200 else None
-    except:
+    except Exception:
         return None
 
 # UI Components

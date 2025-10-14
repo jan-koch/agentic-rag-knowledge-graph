@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Agent Name Override</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        h1 {
+            color: #333;
+        }
+        h2 {
+            color: #667eea;
+            margin-top: 0;
+        }
+        pre {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        code {
+            color: #c33;
+        }
+        .note {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 12px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Agent Name Override Test</h1>
+
+    <div class="test-section">
+        <h2>Test 1: Widget with Custom Agent Name</h2>
+        <p>This widget should display <strong>"My Custom Support Bot"</strong> in the header:</p>
+        <div class="note">
+            <strong>Note:</strong> Replace 'your-api-key-here' with your actual API key to test.
+        </div>
+        <pre><code>&lt;script&gt;
+  window.RAG_CHAT_CONFIG = {
+    apiKey: 'your-api-key-here',
+    apiUrl: 'https://botapi.kobra-dataworks.de',
+    agentName: 'My Custom Support Bot',
+    language: 'en'
+  };
+&lt;/script&gt;
+&lt;script src="https://botapi.kobra-dataworks.de/static/chat-widget-secure.js"&gt;&lt;/script&gt;</code></pre>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 2: Widget WITHOUT Custom Agent Name</h2>
+        <p>This widget should display the agent name from the database:</p>
+        <pre><code>&lt;script&gt;
+  window.RAG_CHAT_CONFIG = {
+    apiKey: 'your-api-key-here',
+    apiUrl: 'https://botapi.kobra-dataworks.de',
+    language: 'de'
+  };
+&lt;/script&gt;
+&lt;script src="https://botapi.kobra-dataworks.de/static/chat-widget-secure.js"&gt;&lt;/script&gt;</code></pre>
+    </div>
+
+    <div class="test-section">
+        <h2>How to Test</h2>
+        <ol>
+            <li>Copy one of the code snippets above</li>
+            <li>Replace <code>'your-api-key-here'</code> with your actual API key</li>
+            <li>Paste the code into a new HTML file</li>
+            <li>Open the HTML file in a browser</li>
+            <li>Check the agent name displayed in the widget header</li>
+        </ol>
+    </div>
+
+    <div class="test-section">
+        <h2>Available Configuration Options</h2>
+        <pre><code>window.RAG_CHAT_CONFIG = {
+  apiKey: 'required',           // Your workspace API key
+  apiUrl: 'optional',            // Default: 'https://botapi.kobra-dataworks.de'
+  agentName: 'optional',         // Override agent name from database
+  greeting: 'optional',          // Custom greeting message
+  language: 'optional',          // 'en' or 'de' (default: 'de')
+  primaryColor: 'optional',      // Custom primary color (default: '#667eea')
+  position: 'optional'           // 'bottom-right', 'bottom-left', etc.
+};</code></pre>
+    </div>
+
+    <!-- Example embed with custom agent name -->
+    <script>
+        window.RAG_CHAT_CONFIG = {
+            apiKey: 'test-key-please-replace',
+            apiUrl: 'https://botapi.kobra-dataworks.de',
+            agentName: 'Test Override Bot',
+            language: 'en'
+        };
+    </script>
+    <script src="https://botapi.kobra-dataworks.de/static/chat-widget-secure.js"></script>
+</body>
+</html>

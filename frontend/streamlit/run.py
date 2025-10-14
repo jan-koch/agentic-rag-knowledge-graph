@@ -12,8 +12,9 @@ from pathlib import Path
 def check_dependencies():
     """Überprüft, ob alle erforderlichen Pakete installiert sind."""
     try:
-        import streamlit
-        import requests
+        import importlib.util
+        if importlib.util.find_spec("streamlit") is None or importlib.util.find_spec("requests") is None:
+            raise ImportError("streamlit or requests not found")
         return True
     except ImportError as e:
         print(f"❌ Fehlende Abhängigkeit: {e}")

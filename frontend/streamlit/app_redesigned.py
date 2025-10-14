@@ -6,12 +6,9 @@ Complete redesign with light/dark theme, session management, and responsive desi
 import streamlit as st
 import requests
 import json
-import time
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Dict, Optional, Any
 import uuid
-import os
-from pathlib import Path
 import hashlib
 
 # Page Configuration
@@ -864,9 +861,9 @@ def send_streaming_message(message: str, api_url: str, api_key: str, search_type
             stream=True,
             timeout=30
         )
-        
+
         return response if response.status_code == 200 else None
-    except:
+    except Exception:
         return None
 
 # UI Components

@@ -1,0 +1,26 @@
+[Unit]
+Description=Multi-Tenant RAG API Server
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=jan
+Group=jan
+WorkingDirectory=/var/www/agentic-rag-knowledge-graph
+Environment="PATH=/var/www/agentic-rag-knowledge-graph/venv/bin"
+ExecStart=/var/www/agentic-rag-knowledge-graph/venv/bin/python -m agent.api
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/rag-api.log
+StandardError=append:/var/log/rag-api.log
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/www/agentic-rag-knowledge-graph
+
+[Install]
+WantedBy=multi-user.target
