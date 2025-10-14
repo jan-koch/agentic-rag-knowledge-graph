@@ -179,19 +179,7 @@ jobs:
           coverage report --fail-under=20
         elif [ -f "coverage.xml" ]; then
           echo "Only coverage.xml found, parsing XML..."
-          python -c '
-import xml.etree.ElementTree as ET
-tree = ET.parse("coverage.xml")
-root = tree.getroot()
-line_rate = float(root.attrib["line-rate"])
-coverage_pct = line_rate * 100
-print(f"Coverage: {coverage_pct:.2f}%")
-if coverage_pct < 20:
-    print(f"ERROR: Coverage {coverage_pct:.2f}% is below threshold of 20%")
-    exit(1)
-else:
-    print(f"✅ Coverage {coverage_pct:.2f}% meets threshold of 20%")
-'
+          python .github/scripts/check_coverage.py
         else
           echo "ERROR: No coverage data found"
           exit 1
