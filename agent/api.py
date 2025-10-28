@@ -12,7 +12,7 @@ from datetime import datetime
 import uuid
 
 from fastapi import FastAPI, HTTPException, Request, Depends
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import StreamingResponse, FileResponse, JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 import uvicorn
@@ -430,9 +430,18 @@ async def execute_agent(
 
 
 # API Endpoints
-@app.get("/health", response_model=HealthStatus)
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health_check():
-    """Health check endpoint."""
+    """
+    Health check endpoint for monitoring services.
+
+    Returns:
+        - HTTP 200: Service is healthy (all systems operational)
+        - HTTP 503: Service is degraded or unhealthy
+        - HTTP 500: Health check failed with exception
+
+    Supports both GET and HEAD requests for efficient uptime monitoring.
+    """
     try:
         # Test database connections
         db_status = await test_connection()
@@ -441,18 +450,26 @@ async def health_check():
         # Determine overall status
         if db_status and graph_status:
             status = "healthy"
+            http_status = 200
         elif db_status or graph_status:
             status = "degraded"
+            http_status = 503
         else:
             status = "unhealthy"
+            http_status = 503
 
-        return HealthStatus(
+        health_data = HealthStatus(
             status=status,
             database=db_status,
             graph_database=graph_status,
             llm_connection=True,  # Assume OK if we can respond
             version="0.1.0",
             timestamp=datetime.now(),
+        )
+
+        return JSONResponse(
+            status_code=http_status,
+            content=health_data.model_dump(mode='json')
         )
 
     except Exception as e:
