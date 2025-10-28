@@ -307,7 +307,9 @@ class APIKey(BaseModel):
     id: UUID
     workspace_id: UUID
     name: str
-    key_prefix: str  # For display: "sk_live_abc123..."
+    key_prefix: str  # For display: "apikey_live_abc..."
+    full_key: Optional[str] = None  # Full key (only for non-legacy keys)
+    is_legacy: bool = False  # True for old hashed-only keys
     scopes: List[str] = Field(default_factory=list)
     rate_limit_per_minute: int = 60
     is_active: bool = True
@@ -315,6 +317,7 @@ class APIKey(BaseModel):
     expires_at: Optional[datetime] = None
     created_at: datetime
     revoked_at: Optional[datetime] = None
+    decryption_error: Optional[bool] = None  # True if key couldn't be decrypted
 
 
 # Request/Response Models for Multi-Tenancy

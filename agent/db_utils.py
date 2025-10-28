@@ -908,11 +908,15 @@ async def create_api_key(
     key_prefix: str,
     key_hash: str,
     scopes: List[str],
+    key_encrypted: Optional[str] = None,
     rate_limit_per_minute: int = 60,
     expires_at: Optional[datetime] = None,
 ) -> str:
     """
     Create a new API key.
+
+    Args:
+        key_encrypted: Encrypted full key (for new keys), None for legacy keys
 
     Returns:
         API key ID
@@ -921,19 +925,21 @@ async def create_api_key(
         result = await conn.fetchrow(
             """
             INSERT INTO api_keys (
-                workspace_id, name, key_prefix, key_hash,
-                scopes, rate_limit_per_minute, expires_at
+                workspace_id, name, key_prefix, key_hash, key_encrypted,
+                scopes, rate_limit_per_minute, expires_at, is_legacy
             )
-            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7)
+            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING id::text
             """,
             workspace_id,
             name,
             key_prefix,
             key_hash,
+            key_encrypted,
             json.dumps(scopes),
             rate_limit_per_minute,
             expires_at,
+            key_encrypted is None,  # is_legacy = True if no encrypted key
         )
         return result["id"]
 
@@ -1000,7 +1006,14 @@ async def revoke_api_key(api_key_id: str) -> bool:
 
 
 async def list_api_keys(workspace_id: str) -> List[Dict[str, Any]]:
-    """List all API keys for a workspace."""
+    """
+    List all API keys for a workspace.
+
+    For non-legacy keys, decrypts and returns the full key.
+    For legacy keys, only returns the key_prefix.
+    """
+    from .encryption import decrypt_api_key, EncryptionError
+
     async with db_pool.acquire() as conn:
         results = await conn.fetch(
             """
@@ -1009,6 +1022,8 @@ async def list_api_keys(workspace_id: str) -> List[Dict[str, Any]]:
                 workspace_id::text,
                 name,
                 key_prefix,
+                key_encrypted,
+                is_legacy,
                 scopes,
                 rate_limit_per_minute,
                 is_active,
@@ -1027,5 +1042,21 @@ async def list_api_keys(workspace_id: str) -> List[Dict[str, Any]]:
         for row in results:
             data = dict(row)
             data["scopes"] = json.loads(data.get("scopes", "[]"))
+
+            # Decrypt full key for non-legacy keys
+            if not data.get("is_legacy") and data.get("key_encrypted"):
+                try:
+                    data["full_key"] = decrypt_api_key(data["key_encrypted"])
+                except EncryptionError as e:
+                    logger.error(f"Failed to decrypt API key {data['id']}: {e}")
+                    data["full_key"] = None
+                    data["decryption_error"] = True
+            else:
+                # Legacy keys don't have retrievable full key
+                data["full_key"] = None
+
+            # Remove encrypted value from response (not needed by clients)
+            data.pop("key_encrypted", None)
+
             api_keys.append(data)
         return api_keys

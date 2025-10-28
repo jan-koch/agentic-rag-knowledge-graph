@@ -1007,15 +1007,33 @@ elif page == "🔑 API Keys":
 
                         if keys_result.get("success") and keys_result["data"]:
                             for key in keys_result["data"]:
+                                # Determine if legacy or new key
+                                is_legacy = key.get('is_legacy', False)
+                                full_key = key.get('full_key')
+
                                 col_k1, col_k2, col_k3, col_k4 = st.columns([3, 2, 2, 1])
 
                                 with col_k1:
-                                    st.markdown(f"**{key['name']}**")
-                                    st.caption(f"Prefix: `{key['key_prefix']}...`")
+                                    # Show key name with legacy badge if applicable
+                                    key_name_display = f"**{key['name']}**"
+                                    if is_legacy:
+                                        key_name_display += " 🏷️ *Legacy*"
+                                    st.markdown(key_name_display)
+
+                                    # Show full key for new keys, prefix for legacy
+                                    if not is_legacy and full_key:
+                                        st.code(full_key, language="text")
+                                        if st.button("📋 Copy", key=f"copy_{key['id']}", help="Copy to clipboard"):
+                                            st.toast("Key copied! (Use Ctrl+C on the code above)")
+                                    else:
+                                        st.caption(f"Prefix: `{key['key_prefix']}...`")
+                                        if is_legacy:
+                                            st.caption("⚠️ *Legacy key - full key not retrievable*")
 
                                 with col_k2:
                                     scopes_str = ", ".join(key.get('scopes', []))
                                     st.caption(f"Scopes: {scopes_str}")
+                                    st.caption(f"Rate: {key.get('rate_limit_per_minute', 60)}/min")
 
                                 with col_k3:
                                     if key.get('is_active'):
@@ -1134,16 +1152,48 @@ elif page == "🔌 Widget Embed":
             active_keys = [k for k in keys_result["data"] if k.get('is_active')]
 
             if active_keys:
-                key_options = {f"{k['name']} ({k['key_prefix']}...)": k['key_prefix'] for k in active_keys}
-                selected_key_label = st.selectbox("Select API Key", list(key_options.keys()))
+                # Separate legacy and new keys
+                new_keys = [k for k in active_keys if not k.get('is_legacy') and k.get('full_key')]
+                legacy_keys = [k for k in active_keys if k.get('is_legacy') or not k.get('full_key')]
 
-                # Use prefilled key if available, otherwise show placeholder
-                if prefilled_api_key:
-                    api_key_value = prefilled_api_key
-                    st.info("🔒 Note: Your API key is embedded in the code below. Keep it secure!")
+                # Build dropdown options
+                key_options = {}
+                selected_key_data = {}
+
+                # Add new keys (with full key available)
+                for k in new_keys:
+                    label = f"{k['name']} ({k['key_prefix']}...)"
+                    key_options[label] = k['id']
+                    selected_key_data[k['id']] = k
+
+                # Add legacy keys (with warning)
+                for k in legacy_keys:
+                    label = f"{k['name']} ({k['key_prefix']}...) [Legacy - Not Recommended]"
+                    key_options[label] = k['id']
+                    selected_key_data[k['id']] = k
+
+                if not key_options:
+                    st.error("No API keys found. Create one in the API Keys page.")
                 else:
-                    api_key_value = 'YOUR_API_KEY_HERE'
-                    st.info("🔒 Note: Replace 'YOUR_API_KEY_HERE' with your actual API key. The key is only shown once at creation time.")
+                    selected_key_label = st.selectbox("Select API Key", list(key_options.keys()))
+                    selected_key_id = key_options[selected_key_label]
+                    selected_key = selected_key_data[selected_key_id]
+
+                    # Determine API key value to use in embed code
+                    if prefilled_api_key:
+                        # Key passed via URL (from API Keys page creation)
+                        api_key_value = prefilled_api_key
+                        st.success("✅ API key pre-filled from creation! The embed code is ready to use.")
+                    elif selected_key.get('full_key'):
+                        # New key with retrievable full key
+                        api_key_value = selected_key['full_key']
+                        st.success(f"✅ Using key: **{selected_key['name']}** - The embed code is ready to use!")
+                        st.info("💡 Your full API key is automatically populated in the code below.")
+                    else:
+                        # Legacy key without full key
+                        api_key_value = 'YOUR_API_KEY_HERE'
+                        st.warning(f"⚠️ **Legacy Key Selected**: This is an old key where the full value isn't stored. You'll need to manually replace 'YOUR_API_KEY_HERE' in the code below.")
+                        st.info("💡 Consider creating a new API key - newer keys can be automatically retrieved and populated.")
 
                 # Escape values for JavaScript to prevent XSS
                 greeting_value = custom_greeting or f"Hallo! Ich bin {details['agent_name']}. Wie kann ich Ihnen helfen?"
@@ -1170,17 +1220,23 @@ elif page == "🔌 Widget Embed":
                 with st.expander("📖 Usage Instructions"):
                     st.markdown("""
                     **How to use this floating widget:**
-                    1. Generate an API key in the **🔑 API Keys** page
-                    2. Replace `YOUR_API_KEY_HERE` with your actual API key
-                    3. Paste the code before the closing `</body>` tag of your website
+                    1. **Select an API key** from the dropdown above (or create one in the **🔑 API Keys** page)
+                    2. **Copy the complete code** - the API key is automatically populated!
+                    3. **Paste the code** before the closing `</body>` tag of your website
                     4. A floating chat button will appear in the bottom right corner
                     5. Users can click to open/close the chat
 
+                    **New vs Legacy Keys:**
+                    - **New keys** (recommended): Full key is stored encrypted and auto-populated here
+                    - **Legacy keys**: Old keys where full value wasn't stored - requires manual replacement
+
                     **Security:**
-                    - Keep your API key private
-                    - Use domain restrictions if available
+                    - API keys are stored encrypted with AES-256 in the database
+                    - Keep your keys private and never commit them to version control
+                    - Use environment variables or secure vaults in production
                     - Monitor usage in the dashboard
                     - Rotate keys regularly
+                    - Legacy keys can be viewed in the **🔑 API Keys** page
                     """)
 
                 st.markdown("---")

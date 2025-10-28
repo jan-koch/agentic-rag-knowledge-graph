@@ -11,6 +11,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Header
 
+from .encryption import encrypt_api_key, EncryptionError
 from .models import (
     Organization,
     Workspace,
@@ -52,12 +53,12 @@ router = APIRouter(prefix="/v1", tags=["multi-tenant"])
 # ====================
 
 
-def generate_api_key() -> tuple[str, str, str]:
+def generate_api_key() -> tuple[str, str, str, str]:
     """
     Generate a new API key.
 
     Returns:
-        Tuple of (full_key, key_prefix, key_hash)
+        Tuple of (full_key, key_prefix, key_hash, key_encrypted)
     """
     # Generate random key
     full_key = f"apikey_live_{secrets.token_urlsafe(32)}"
@@ -65,10 +66,17 @@ def generate_api_key() -> tuple[str, str, str]:
     # Create prefix (first 15 chars for lookup)
     key_prefix = full_key[:15]
 
-    # Hash full key for storage
+    # Hash full key for authentication
     key_hash = hashlib.sha256(full_key.encode()).hexdigest()
 
-    return full_key, key_prefix, key_hash
+    # Encrypt full key for storage (allows retrieval)
+    try:
+        key_encrypted = encrypt_api_key(full_key)
+    except EncryptionError as e:
+        logger.error(f"Failed to encrypt API key: {e}")
+        raise HTTPException(500, "Failed to encrypt API key. Check ENCRYPTION_KEY environment variable.")
+
+    return full_key, key_prefix, key_hash, key_encrypted
 
 
 def verify_api_key_hash(full_key: str, stored_hash: str) -> bool:
@@ -304,8 +312,8 @@ async def create_api_key_endpoint(workspace_id: str, request: CreateAPIKeyReques
     """
     Create a new API key for a workspace.
 
-    WARNING: The full API key is only returned once at creation time.
-    Store it securely as it cannot be retrieved later.
+    NOTE: With encrypted storage, the full key can now be retrieved later.
+    However, it's still best practice to save it during creation.
     """
     try:
         # Verify workspace exists
@@ -313,8 +321,8 @@ async def create_api_key_endpoint(workspace_id: str, request: CreateAPIKeyReques
         if not workspace:
             raise HTTPException(404, "Workspace not found")
 
-        # Generate API key
-        full_key, key_prefix, key_hash = generate_api_key()
+        # Generate API key (now returns encrypted version too)
+        full_key, key_prefix, key_hash, key_encrypted = generate_api_key()
 
         # Create in database
         api_key_id = await create_api_key(
@@ -322,6 +330,7 @@ async def create_api_key_endpoint(workspace_id: str, request: CreateAPIKeyReques
             name=request.name,
             key_prefix=key_prefix,
             key_hash=key_hash,
+            key_encrypted=key_encrypted,
             scopes=request.scopes,
             rate_limit_per_minute=request.rate_limit_per_minute,
             expires_at=request.expires_at,
