@@ -6,6 +6,8 @@ import os
 import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
+from collections import OrderedDict
+import asyncio
 
 from graphiti_core import Graphiti
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
@@ -19,6 +21,61 @@ from dotenv import load_dotenv
 load_dotenv()
 
 logger = logging.getLogger(__name__)
+
+
+async def retry_with_exponential_backoff(
+    func,
+    max_retries: int = 3,
+    initial_delay: float = 1.0,
+    max_delay: float = 60.0,
+    exponential_base: float = 2.0,
+    exceptions: tuple = (Exception,),
+):
+    """
+    Retry a function with exponential backoff.
+
+    Args:
+        func: Async function to retry
+        max_retries: Maximum number of retry attempts
+        initial_delay: Initial delay in seconds
+        max_delay: Maximum delay in seconds
+        exponential_base: Base for exponential backoff
+        exceptions: Tuple of exceptions to catch and retry
+
+    Returns:
+        Result of the function call
+
+    Raises:
+        Last exception if all retries fail
+    """
+    last_exception = None
+    delay = initial_delay
+
+    for attempt in range(max_retries + 1):
+        try:
+            return await func()
+        except exceptions as e:
+            last_exception = e
+
+            if attempt == max_retries:
+                logger.error(
+                    f"Function failed after {max_retries} retries: {e}"
+                )
+                raise
+
+            # Calculate delay with exponential backoff
+            delay = min(initial_delay * (exponential_base ** attempt), max_delay)
+
+            logger.warning(
+                f"Operation failed (attempt {attempt + 1}/{max_retries + 1}), "
+                f"retrying in {delay:.2f}s: {e}"
+            )
+
+            await asyncio.sleep(delay)
+
+    # Should never reach here, but just in case
+    if last_exception:
+        raise last_exception
 
 
 # Help from this PR for setting up the custom clients: https://github.com/getzep/graphiti/pull/601/files
@@ -74,7 +131,7 @@ class GraphitiClient:
         self._initialized = False
 
     async def initialize(self):
-        """Initialize Graphiti client."""
+        """Initialize Graphiti client with retry logic."""
         if self._initialized:
             return
 
@@ -115,8 +172,17 @@ class GraphitiClient:
                 ),
             )
 
-            # Build indices and constraints
-            await self.graphiti.build_indices_and_constraints()
+            # Build indices and constraints with retry logic
+            async def _build_indices():
+                await self.graphiti.build_indices_and_constraints()
+
+            await retry_with_exponential_backoff(
+                _build_indices,
+                max_retries=3,
+                initial_delay=2.0,
+                max_delay=30.0,
+                exceptions=(ConnectionError, TimeoutError, Exception),
+            )
 
             self._initialized = True
             logger.info(
@@ -124,7 +190,7 @@ class GraphitiClient:
             )
 
         except Exception as e:
-            logger.error(f"Failed to initialize Graphiti: {e}")
+            logger.error(f"Failed to initialize Graphiti after retries: {e}")
             raise
 
     async def close(self):
@@ -393,11 +459,94 @@ class GraphitiClient:
             logger.warning("Reinitialized Graphiti client (fresh indices created)")
 
 
+class LRUGraphClientCache:
+    """
+    LRU cache for Graphiti clients with automatic cleanup of evicted entries.
+    Prevents memory leaks by limiting the number of workspace clients.
+    """
+
+    def __init__(self, maxsize: int = 100):
+        """
+        Initialize LRU cache.
+
+        Args:
+            maxsize: Maximum number of clients to cache (default 100)
+        """
+        self.maxsize = maxsize
+        self.cache: OrderedDict[str, GraphitiClient] = OrderedDict()
+        self._lock = asyncio.Lock()
+
+    async def get(self, workspace_id: str) -> Optional[GraphitiClient]:
+        """
+        Get client from cache, moving it to end (most recently used).
+
+        Args:
+            workspace_id: Workspace UUID
+
+        Returns:
+            Cached client or None if not found
+        """
+        async with self._lock:
+            if workspace_id in self.cache:
+                # Move to end (most recently used)
+                self.cache.move_to_end(workspace_id)
+                return self.cache[workspace_id]
+            return None
+
+    async def put(self, workspace_id: str, client: GraphitiClient):
+        """
+        Add client to cache, evicting oldest if at capacity.
+
+        Args:
+            workspace_id: Workspace UUID
+            client: GraphitiClient instance to cache
+        """
+        async with self._lock:
+            # Remove and re-add to update position
+            if workspace_id in self.cache:
+                self.cache.move_to_end(workspace_id)
+            else:
+                # Check if we need to evict
+                if len(self.cache) >= self.maxsize:
+                    # Evict oldest (first) item
+                    evicted_id, evicted_client = self.cache.popitem(last=False)
+                    logger.info(
+                        f"Evicting Graphiti client for workspace {evicted_id} (cache full)"
+                    )
+                    try:
+                        await evicted_client.close()
+                    except Exception as e:
+                        logger.error(
+                            f"Error closing evicted client for workspace {evicted_id}: {e}"
+                        )
+
+                self.cache[workspace_id] = client
+
+    async def clear(self):
+        """Close and clear all cached clients."""
+        async with self._lock:
+            for workspace_id, client in list(self.cache.items()):
+                try:
+                    logger.info(f"Closing Graphiti client for workspace: {workspace_id}")
+                    await client.close()
+                except Exception as e:
+                    logger.error(
+                        f"Error closing client for workspace {workspace_id}: {e}"
+                    )
+            self.cache.clear()
+
+    def size(self) -> int:
+        """Return current cache size."""
+        return len(self.cache)
+
+
 # Global Graphiti client instance (for backwards compatibility)
 graph_client = GraphitiClient()
 
-# Workspace-specific client cache for multi-tenant isolation
-_workspace_graph_clients: Dict[str, GraphitiClient] = {}
+# Workspace-specific client cache for multi-tenant isolation (with LRU eviction)
+_workspace_graph_clients = LRUGraphClientCache(
+    maxsize=int(os.getenv("GRAPH_CLIENT_CACHE_SIZE", "100"))
+)
 
 
 async def get_workspace_graph_client(workspace_id: str) -> GraphitiClient:
@@ -406,6 +555,8 @@ async def get_workspace_graph_client(workspace_id: str) -> GraphitiClient:
 
     Each workspace gets its own Graphiti client with a unique group_id,
     ensuring complete isolation of knowledge graphs between workspaces.
+
+    Uses LRU caching to prevent memory leaks from unlimited client accumulation.
 
     Args:
         workspace_id: Workspace UUID
@@ -417,13 +568,20 @@ async def get_workspace_graph_client(workspace_id: str) -> GraphitiClient:
         logger.warning("No workspace_id provided, using global client")
         return graph_client
 
-    if workspace_id not in _workspace_graph_clients:
-        logger.info(f"Creating new Graphiti client for workspace: {workspace_id}")
-        client = GraphitiClient(group_id=workspace_id)
-        await client.initialize()
-        _workspace_graph_clients[workspace_id] = client
+    # Try to get from cache
+    client = await _workspace_graph_clients.get(workspace_id)
+    if client:
+        return client
 
-    return _workspace_graph_clients[workspace_id]
+    # Create new client
+    logger.info(f"Creating new Graphiti client for workspace: {workspace_id}")
+    client = GraphitiClient(group_id=workspace_id)
+    await client.initialize()
+
+    # Add to cache (will evict oldest if needed)
+    await _workspace_graph_clients.put(workspace_id, client)
+
+    return client
 
 
 async def initialize_graph():
@@ -436,12 +594,8 @@ async def close_graph():
     # Close global client
     await graph_client.close()
 
-    # Close all workspace-specific clients
-    for workspace_id, client in _workspace_graph_clients.items():
-        logger.info(f"Closing Graphiti client for workspace: {workspace_id}")
-        await client.close()
-
-    _workspace_graph_clients.clear()
+    # Close all workspace-specific clients using LRU cache's clear method
+    await _workspace_graph_clients.clear()
 
 
 # Convenience functions for common operations

@@ -3,12 +3,16 @@ Tools for the Pydantic AI agent.
 """
 
 import logging
+import hashlib
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import asyncio
+from collections import OrderedDict
+import time
 
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
+import os
 
 from .db_utils import (
     vector_search,
@@ -36,9 +40,83 @@ embedding_client = get_embedding_client()
 EMBEDDING_MODEL = get_embedding_model()
 
 
+class EmbeddingCache:
+    """
+    LRU cache with TTL for embedding vectors.
+    Prevents repeated API calls for the same text.
+    """
+
+    def __init__(self, maxsize: int = 1000, ttl_seconds: int = 3600):
+        """
+        Initialize embedding cache.
+
+        Args:
+            maxsize: Maximum number of cached embeddings
+            ttl_seconds: Time-to-live in seconds (default 1 hour)
+        """
+        self.maxsize = maxsize
+        self.ttl_seconds = ttl_seconds
+        self.cache: OrderedDict[str, tuple[List[float], float]] = OrderedDict()
+        self._lock = asyncio.Lock()
+
+    def _get_cache_key(self, text: str) -> str:
+        """Generate cache key from text using hash."""
+        return hashlib.sha256(text.encode()).hexdigest()
+
+    async def get(self, text: str) -> Optional[List[float]]:
+        """Get cached embedding if exists and not expired."""
+        async with self._lock:
+            cache_key = self._get_cache_key(text)
+            if cache_key in self.cache:
+                embedding, expiry = self.cache[cache_key]
+                if time.time() < expiry:
+                    # Move to end (most recently used)
+                    self.cache.move_to_end(cache_key)
+                    return embedding
+                else:
+                    # Expired, remove it
+                    del self.cache[cache_key]
+            return None
+
+    async def set(self, text: str, embedding: List[float]):
+        """Cache embedding with TTL."""
+        async with self._lock:
+            cache_key = self._get_cache_key(text)
+            expiry = time.time() + self.ttl_seconds
+
+            # Remove if exists
+            if cache_key in self.cache:
+                del self.cache[cache_key]
+
+            # Evict oldest if at capacity
+            if len(self.cache) >= self.maxsize:
+                self.cache.popitem(last=False)
+
+            self.cache[cache_key] = (embedding, expiry)
+
+    async def clear(self):
+        """Clear all cached embeddings."""
+        async with self._lock:
+            self.cache.clear()
+
+    def size(self) -> int:
+        """Return current cache size."""
+        return len(self.cache)
+
+
+# Global embedding cache
+_embedding_cache = EmbeddingCache(
+    maxsize=int(os.getenv("EMBEDDING_CACHE_SIZE", "1000")),
+    ttl_seconds=int(os.getenv("EMBEDDING_CACHE_TTL", "3600"))
+)
+
+
 async def generate_embedding(text: str) -> List[float]:
     """
-    Generate embedding for text using OpenAI.
+    Generate embedding for text using OpenAI with caching.
+
+    Caches embeddings to avoid repeated API calls for the same text.
+    Cache hits can significantly reduce latency and API costs.
 
     Args:
         text: Text to embed
@@ -46,11 +124,24 @@ async def generate_embedding(text: str) -> List[float]:
     Returns:
         Embedding vector
     """
+    # Check cache first
+    cached_embedding = await _embedding_cache.get(text)
+    if cached_embedding is not None:
+        logger.debug(f"Embedding cache hit for text: {text[:50]}...")
+        return cached_embedding
+
+    # Cache miss - generate embedding
     try:
         response = await embedding_client.embeddings.create(
             model=EMBEDDING_MODEL, input=text
         )
-        return response.data[0].embedding
+        embedding = response.data[0].embedding
+
+        # Cache the result
+        await _embedding_cache.set(text, embedding)
+
+        logger.debug(f"Generated and cached embedding for text: {text[:50]}...")
+        return embedding
     except Exception as e:
         logger.error(f"Failed to generate embedding: {e}")
         raise
@@ -58,57 +149,138 @@ async def generate_embedding(text: str) -> List[float]:
 
 # Tool Input Models
 class VectorSearchInput(BaseModel):
-    """Input for vector search tool."""
+    """Input for vector search tool with validation."""
 
-    query: str = Field(..., description="Search query")
-    workspace_id: str = Field(..., description="Workspace ID to search within")
-    limit: int = Field(default=10, description="Maximum number of results")
+    query: str = Field(
+        ...,
+        description="Search query",
+        min_length=1,
+        max_length=5000,
+    )
+    workspace_id: str = Field(
+        ...,
+        description="Workspace ID to search within",
+        min_length=1,
+        max_length=100,
+    )
+    limit: int = Field(
+        default=10,
+        description="Maximum number of results",
+        ge=1,
+        le=100,  # Prevent excessive results
+    )
 
 
 class GraphSearchInput(BaseModel):
-    """Input for graph search tool."""
+    """Input for graph search tool with validation."""
 
-    query: str = Field(..., description="Search query")
-    workspace_id: str = Field(..., description="Workspace ID for graph search")
+    query: str = Field(
+        ...,
+        description="Search query",
+        min_length=1,
+        max_length=5000,
+    )
+    workspace_id: str = Field(
+        ...,
+        description="Workspace ID for graph search",
+        min_length=1,
+        max_length=100,
+    )
 
 
 class HybridSearchInput(BaseModel):
-    """Input for hybrid search tool."""
+    """Input for hybrid search tool with validation."""
 
-    query: str = Field(..., description="Search query")
-    workspace_id: str = Field(..., description="Workspace ID to search within")
-    limit: int = Field(default=10, description="Maximum number of results")
+    query: str = Field(
+        ...,
+        description="Search query",
+        min_length=1,
+        max_length=5000,
+    )
+    workspace_id: str = Field(
+        ...,
+        description="Workspace ID to search within",
+        min_length=1,
+        max_length=100,
+    )
+    limit: int = Field(
+        default=10,
+        description="Maximum number of results",
+        ge=1,
+        le=100,  # Prevent excessive results
+    )
     text_weight: float = Field(
-        default=0.3, description="Weight for text similarity (0-1)"
+        default=0.3,
+        description="Weight for text similarity (0-1)",
+        ge=0.0,
+        le=1.0,  # Ensure weight is in valid range
     )
 
 
 class DocumentInput(BaseModel):
-    """Input for document retrieval."""
+    """Input for document retrieval with validation."""
 
-    document_id: str = Field(..., description="Document ID to retrieve")
+    document_id: str = Field(
+        ...,
+        description="Document ID to retrieve",
+        min_length=1,
+        max_length=100,
+    )
 
 
 class DocumentListInput(BaseModel):
-    """Input for listing documents."""
+    """Input for listing documents with validation."""
 
-    limit: int = Field(default=20, description="Maximum number of documents")
-    offset: int = Field(default=0, description="Number of documents to skip")
+    limit: int = Field(
+        default=20,
+        description="Maximum number of documents",
+        ge=1,
+        le=1000,  # Prevent excessive listings
+    )
+    offset: int = Field(
+        default=0,
+        description="Number of documents to skip",
+        ge=0,
+        le=100000,  # Reasonable pagination limit
+    )
 
 
 class EntityRelationshipInput(BaseModel):
-    """Input for entity relationship query."""
+    """Input for entity relationship query with validation."""
 
-    entity_name: str = Field(..., description="Name of the entity")
-    depth: int = Field(default=2, description="Maximum traversal depth")
+    entity_name: str = Field(
+        ...,
+        description="Name of the entity",
+        min_length=1,
+        max_length=500,
+    )
+    depth: int = Field(
+        default=2,
+        description="Maximum traversal depth",
+        ge=1,
+        le=5,  # Prevent excessive graph traversal
+    )
 
 
 class EntityTimelineInput(BaseModel):
-    """Input for entity timeline query."""
+    """Input for entity timeline query with validation."""
 
-    entity_name: str = Field(..., description="Name of the entity")
-    start_date: Optional[str] = Field(None, description="Start date (ISO format)")
-    end_date: Optional[str] = Field(None, description="End date (ISO format)")
+    entity_name: str = Field(
+        ...,
+        description="Name of the entity",
+        min_length=1,
+        max_length=500,
+    )
+    start_date: Optional[str] = Field(
+        None,
+        description="Start date (ISO format)",
+        max_length=30,  # ISO date length
+    )
+    end_date: Optional[str] = Field(
+        None,
+        description="End date (ISO format)",
+        max_length=30,  # ISO date length
+    )
 
 
 # Tool Implementation Functions

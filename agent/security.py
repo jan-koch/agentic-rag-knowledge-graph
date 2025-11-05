@@ -6,6 +6,7 @@ import os
 import hmac
 import hashlib
 import time
+import asyncio
 import logging
 from typing import Optional, List, Dict, Any
 from functools import wraps
@@ -28,8 +29,9 @@ RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "60"))
 RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
 ENABLE_IP_WHITELIST = os.getenv("ENABLE_IP_WHITELIST", "false").lower() == "true"
 
-# In-memory rate limiting (use Redis in production)
+# Thread-safe in-memory rate limiting (use Redis in production)
 rate_limit_store: Dict[str, List[float]] = {}
+_rate_limit_lock = asyncio.Lock()
 
 security = HTTPBearer(auto_error=False)
 
@@ -105,11 +107,13 @@ def verify_n8n_webhook_signature(payload: bytes, signature: str, secret: str) ->
         return False
 
 
-def check_rate_limit(
+async def check_rate_limit(
     identifier: str, limit: int = RATE_LIMIT_REQUESTS, window: int = RATE_LIMIT_WINDOW
 ) -> bool:
     """
-    Check if request is within rate limits.
+    Thread-safe check if request is within rate limits.
+
+    Uses asyncio lock to prevent race conditions in concurrent environments.
 
     Args:
         identifier: Unique identifier (IP, API key, etc.)
@@ -119,29 +123,34 @@ def check_rate_limit(
     Returns:
         True if within limits, False if exceeded
     """
-    now = time.time()
-    cutoff = now - window
+    async with _rate_limit_lock:
+        now = time.time()
+        cutoff = now - window
 
-    # Clean old entries
-    if identifier in rate_limit_store:
-        rate_limit_store[identifier] = [
-            timestamp
-            for timestamp in rate_limit_store[identifier]
-            if timestamp > cutoff
-        ]
-    else:
-        rate_limit_store[identifier] = []
+        # Clean old entries
+        if identifier in rate_limit_store:
+            rate_limit_store[identifier] = [
+                timestamp
+                for timestamp in rate_limit_store[identifier]
+                if timestamp > cutoff
+            ]
+        else:
+            rate_limit_store[identifier] = []
 
-    # Check if limit exceeded
-    if len(rate_limit_store[identifier]) >= limit:
-        return False
+        # Check if limit exceeded
+        if len(rate_limit_store[identifier]) >= limit:
+            logger.warning(
+                f"Rate limit exceeded for {identifier}: "
+                f"{len(rate_limit_store[identifier])}/{limit} requests in {window}s"
+            )
+            return False
 
-    # Add current request
-    rate_limit_store[identifier].append(now)
-    return True
+        # Add current request
+        rate_limit_store[identifier].append(now)
+        return True
 
 
-def validate_n8n_request(request: Request) -> Dict[str, Any]:
+async def validate_n8n_request(request: Request) -> Dict[str, Any]:
     """
     Validate that request comes from authorized n8n instance.
 
@@ -164,8 +173,8 @@ def validate_n8n_request(request: Request) -> Dict[str, Any]:
                 status_code=403, detail="Access denied - IP not allowed"
             )
 
-    # Rate limiting
-    if not check_rate_limit(f"ip:{client_ip}"):
+    # Rate limiting (now async with thread-safety)
+    if not await check_rate_limit(f"ip:{client_ip}"):
         logger.warning(f"Rate limit exceeded for IP {client_ip}")
         raise SecurityError(status_code=429, detail="Rate limit exceeded")
 
@@ -345,9 +354,9 @@ def require_n8n_auth(func):
                 status_code=500, detail="Internal error - request object not found"
             )
 
-        # Validate n8n request
+        # Validate n8n request (now async)
         try:
-            validation_info = validate_n8n_request(request)
+            validation_info = await validate_n8n_request(request)
 
             # Add validation info to request state
             request.state.security_info = validation_info

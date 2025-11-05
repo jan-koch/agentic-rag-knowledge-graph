@@ -4,9 +4,12 @@ Database utilities for PostgreSQL connection and operations.
 
 import os
 import json
+import asyncio
+import time
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta, timezone
 from contextlib import asynccontextmanager
+from collections import OrderedDict
 import logging
 
 import asyncpg
@@ -17,6 +20,152 @@ from dotenv import load_dotenv
 load_dotenv()
 
 logger = logging.getLogger(__name__)
+
+
+class TTLCache:
+    """
+    Thread-safe TTL (Time-To-Live) cache for async functions.
+    Prevents excessive database queries for frequently accessed data.
+    """
+
+    def __init__(self, maxsize: int = 1000, ttl_seconds: int = 300):
+        """
+        Initialize TTL cache.
+
+        Args:
+            maxsize: Maximum number of entries (default 1000)
+            ttl_seconds: Time-to-live in seconds (default 300 = 5 minutes)
+        """
+        self.maxsize = maxsize
+        self.ttl_seconds = ttl_seconds
+        self.cache: OrderedDict[str, tuple[Any, float]] = OrderedDict()
+        self._lock = asyncio.Lock()
+
+    async def get(self, key: str) -> Optional[Any]:
+        """
+        Get value from cache if not expired.
+
+        Args:
+            key: Cache key
+
+        Returns:
+            Cached value or None if not found or expired
+        """
+        async with self._lock:
+            if key in self.cache:
+                value, expiry_time = self.cache[key]
+                if time.time() < expiry_time:
+                    # Move to end (LRU)
+                    self.cache.move_to_end(key)
+                    return value
+                else:
+                    # Expired, remove it
+                    del self.cache[key]
+            return None
+
+    async def set(self, key: str, value: Any):
+        """
+        Set value in cache with TTL.
+
+        Args:
+            key: Cache key
+            value: Value to cache
+        """
+        async with self._lock:
+            expiry_time = time.time() + self.ttl_seconds
+
+            # Remove if already exists
+            if key in self.cache:
+                del self.cache[key]
+
+            # Check if we need to evict (LRU)
+            if len(self.cache) >= self.maxsize:
+                # Remove oldest (first) item
+                self.cache.popitem(last=False)
+
+            self.cache[key] = (value, expiry_time)
+
+    async def invalidate(self, key: str):
+        """
+        Invalidate a specific cache entry.
+
+        Args:
+            key: Cache key to invalidate
+        """
+        async with self._lock:
+            if key in self.cache:
+                del self.cache[key]
+
+    async def clear(self):
+        """Clear all cache entries."""
+        async with self._lock:
+            self.cache.clear()
+
+    def size(self) -> int:
+        """Return current cache size."""
+        return len(self.cache)
+
+
+# Global caches
+_workspace_cache = TTLCache(
+    maxsize=int(os.getenv("WORKSPACE_CACHE_SIZE", "1000")),
+    ttl_seconds=int(os.getenv("WORKSPACE_CACHE_TTL", "300"))
+)
+
+
+async def retry_with_exponential_backoff(
+    func,
+    max_retries: int = 3,
+    initial_delay: float = 1.0,
+    max_delay: float = 60.0,
+    exponential_base: float = 2.0,
+    exceptions: tuple = (Exception,),
+):
+    """
+    Retry a function with exponential backoff.
+
+    Args:
+        func: Async function to retry
+        max_retries: Maximum number of retry attempts
+        initial_delay: Initial delay in seconds
+        max_delay: Maximum delay in seconds
+        exponential_base: Base for exponential backoff
+        exceptions: Tuple of exceptions to catch and retry
+
+    Returns:
+        Result of the function call
+
+    Raises:
+        Last exception if all retries fail
+    """
+    last_exception = None
+    delay = initial_delay
+
+    for attempt in range(max_retries + 1):
+        try:
+            return await func()
+        except exceptions as e:
+            last_exception = e
+
+            if attempt == max_retries:
+                logger.error(
+                    f"Function {func.__name__} failed after {max_retries} retries: {e}"
+                )
+                raise
+
+            # Calculate delay with exponential backoff
+            delay = min(initial_delay * (exponential_base ** attempt), max_delay)
+
+            logger.warning(
+                f"Function {func.__name__} failed (attempt {attempt + 1}/{max_retries + 1}), "
+                f"retrying in {delay:.2f}s: {e}"
+            )
+
+            await asyncio.sleep(delay)
+
+    # Should never reach here, but just in case
+    if last_exception:
+        raise last_exception
 
 
 class DatabasePool:
@@ -36,14 +185,28 @@ class DatabasePool:
         self.pool: Optional[Pool] = None
 
     async def initialize(self):
-        """Create connection pool."""
+        """Create connection pool with retry logic."""
         if not self.pool:
-            self.pool = await asyncpg.create_pool(
-                self.database_url,
-                min_size=5,
-                max_size=20,
-                max_inactive_connection_lifetime=300,
-                command_timeout=60,
+            async def _create_pool():
+                return await asyncpg.create_pool(
+                    self.database_url,
+                    min_size=5,
+                    max_size=20,
+                    max_inactive_connection_lifetime=300,
+                    command_timeout=60,
+                )
+
+            # Retry pool creation with exponential backoff
+            self.pool = await retry_with_exponential_backoff(
+                _create_pool,
+                max_retries=3,
+                initial_delay=1.0,
+                max_delay=10.0,
+                exceptions=(
+                    asyncpg.PostgresConnectionError,
+                    ConnectionRefusedError,
+                    OSError,
+                ),
             )
             logger.info("Database connection pool initialized")
 
@@ -62,6 +225,59 @@ class DatabasePool:
 
         async with self.pool.acquire() as connection:
             yield connection
+
+    def get_pool_stats(self) -> Dict[str, Any]:
+        """
+        Get connection pool statistics.
+
+        Returns:
+            Dictionary with pool metrics
+        """
+        if not self.pool:
+            return {
+                "initialized": False,
+                "size": 0,
+                "free": 0,
+                "used": 0,
+                "utilization_percent": 0,
+            }
+
+        size = self.pool.get_size()
+        free = self.pool.get_idle_size()
+        used = size - free
+        max_size = self.pool.get_max_size()
+        min_size = self.pool.get_min_size()
+
+        utilization = (used / max_size * 100) if max_size > 0 else 0
+
+        return {
+            "initialized": True,
+            "size": size,
+            "free": free,
+            "used": used,
+            "min_size": min_size,
+            "max_size": max_size,
+            "utilization_percent": round(utilization, 2),
+            "is_near_capacity": utilization > 80,  # Warn if >80% used
+        }
+
+    async def health_check(self) -> bool:
+        """
+        Check database connection health.
+
+        Returns:
+            True if connection is healthy
+        """
+        try:
+            if not self.pool:
+                return False
+
+            async with self.acquire() as conn:
+                result = await conn.fetchval("SELECT 1")
+                return result == 1
+        except Exception as e:
+            logger.error(f"Database health check failed: {e}")
+            return False
 
 
 # Global database pool instance
@@ -662,7 +878,19 @@ async def create_workspace(
 
 
 async def get_workspace(workspace_id: str) -> Optional[Dict[str, Any]]:
-    """Get workspace by ID."""
+    """
+    Get workspace by ID with caching.
+
+    Uses TTL cache to prevent excessive database queries for workspace metadata.
+    Cache entries expire after WORKSPACE_CACHE_TTL seconds (default 300 = 5 minutes).
+    """
+    # Check cache first
+    cache_key = f"workspace:{workspace_id}"
+    cached_value = await _workspace_cache.get(cache_key)
+    if cached_value is not None:
+        return cached_value
+
+    # Cache miss - query database
     async with db_pool.acquire() as conn:
         result = await conn.fetchrow(
             """
@@ -687,6 +915,10 @@ async def get_workspace(workspace_id: str) -> Optional[Dict[str, Any]]:
         if result:
             data = dict(result)
             data["settings"] = json.loads(data.get("settings", "{}"))
+
+            # Cache the result
+            await _workspace_cache.set(cache_key, data)
+
             return data
         return None
 

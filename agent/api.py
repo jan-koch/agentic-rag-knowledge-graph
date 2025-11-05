@@ -6,6 +6,7 @@ import os
 import json
 import logging
 import hashlib
+import asyncio
 from contextlib import asynccontextmanager
 from typing import Dict, Any, List, Optional
 from datetime import datetime
@@ -77,6 +78,11 @@ APP_ENV = os.getenv("APP_ENV", "development")
 APP_HOST = os.getenv("APP_HOST", "127.0.0.1")  # Only listen on localhost
 APP_PORT = int(os.getenv("APP_PORT", 8000))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+
+# Timeout configuration (in seconds)
+REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "120"))  # 2 minutes default
+STREAM_TIMEOUT = int(os.getenv("STREAM_TIMEOUT", "300"))  # 5 minutes for streaming
+KEEPALIVE_INTERVAL = int(os.getenv("KEEPALIVE_INTERVAL", "30"))  # 30s keepalive
 
 # Configure logging
 logging.basicConfig(
@@ -393,10 +399,20 @@ async def execute_agent(
                 f"Previous conversation:\n{context_str}\n\nCurrent question: {message}"
             )
 
-        # Run the agent with dynamic system prompt
-        result = await rag_agent.run(
-            full_prompt, deps=deps, system_prompt=dynamic_system_prompt
-        )
+        # Run the agent with dynamic system prompt and timeout
+        try:
+            result = await asyncio.wait_for(
+                rag_agent.run(
+                    full_prompt, deps=deps, system_prompt=dynamic_system_prompt
+                ),
+                timeout=REQUEST_TIMEOUT
+            )
+        except asyncio.TimeoutError:
+            logger.error(f"Request timeout after {REQUEST_TIMEOUT}s for session {session_id}")
+            raise HTTPException(
+                status_code=504,
+                detail=f"Request timed out after {REQUEST_TIMEOUT} seconds"
+            )
 
         response = result.data
         tools_used = extract_tool_calls(result)
@@ -458,6 +474,49 @@ async def health_check():
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         raise HTTPException(status_code=500, detail="Health check failed")
+
+
+@app.get("/metrics")
+async def get_metrics(api_key: str = Depends(verify_api_key)):
+    """
+    Get system metrics including connection pool statistics.
+    Requires API key authentication.
+    """
+    try:
+        from .db_utils import db_pool
+        from .graph_utils import _workspace_graph_clients
+        from .tools import _embedding_cache
+
+        # Get database pool stats
+        db_stats = db_pool.get_pool_stats()
+
+        # Get cache statistics
+        metrics = {
+            "database_pool": db_stats,
+            "workspace_graph_clients": {
+                "cached_clients": _workspace_graph_clients.size(),
+                "max_size": _workspace_graph_clients.maxsize,
+            },
+            "embedding_cache": {
+                "cached_embeddings": _embedding_cache.size(),
+                "max_size": _embedding_cache.maxsize,
+                "ttl_seconds": _embedding_cache.ttl_seconds,
+            },
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        # Add warning if pool is near capacity
+        if db_stats.get("is_near_capacity"):
+            metrics["warnings"] = [
+                "Database connection pool is near capacity (>80% used). "
+                "Consider increasing MAX_SIZE or investigating connection leaks."
+            ]
+
+        return metrics
+
+    except Exception as e:
+        logger.error(f"Metrics endpoint failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve metrics")
 
 
 @app.post("/chat", response_model=ChatResponse)
@@ -558,36 +617,47 @@ async def chat_stream(request: ChatRequest, api_key: str = Depends(verify_api_ke
                 )
 
                 full_response = ""
+                last_activity = asyncio.get_event_loop().time()
 
-                # Stream using agent.iter() pattern with dynamic system prompt
-                async with rag_agent.iter(
-                    full_prompt, deps=deps, system_prompt=dynamic_system_prompt
-                ) as run:
-                    async for node in run:
-                        if rag_agent.is_model_request_node(node):
-                            # Stream tokens from the model
-                            async with node.stream(run.ctx) as request_stream:
-                                async for event in request_stream:
-                                    from pydantic_ai.messages import (
-                                        PartStartEvent,
-                                        PartDeltaEvent,
-                                        TextPartDelta,
-                                    )
+                # Stream using agent.iter() pattern with dynamic system prompt and timeout
+                try:
+                    async with asyncio.timeout(STREAM_TIMEOUT):
+                        async with rag_agent.iter(
+                            full_prompt, deps=deps, system_prompt=dynamic_system_prompt
+                        ) as run:
+                            async for node in run:
+                                if rag_agent.is_model_request_node(node):
+                                    # Stream tokens from the model
+                                    async with node.stream(run.ctx) as request_stream:
+                                        async for event in request_stream:
+                                            from pydantic_ai.messages import (
+                                                PartStartEvent,
+                                                PartDeltaEvent,
+                                                TextPartDelta,
+                                            )
 
-                                    if (
-                                        isinstance(event, PartStartEvent)
-                                        and event.part.part_kind == "text"
-                                    ):
-                                        delta_content = event.part.content
-                                        yield f"data: {json.dumps({'type': 'text', 'content': delta_content})}\n\n"
-                                        full_response += delta_content
+                                            if (
+                                                isinstance(event, PartStartEvent)
+                                                and event.part.part_kind == "text"
+                                            ):
+                                                delta_content = event.part.content
+                                                yield f"data: {json.dumps({'type': 'text', 'content': delta_content})}\n\n"
+                                                full_response += delta_content
+                                                last_activity = asyncio.get_event_loop().time()
 
-                                    elif isinstance(
-                                        event, PartDeltaEvent
-                                    ) and isinstance(event.delta, TextPartDelta):
-                                        delta_content = event.delta.content_delta
-                                        yield f"data: {json.dumps({'type': 'text', 'content': delta_content})}\n\n"
-                                        full_response += delta_content
+                                            elif isinstance(
+                                                event, PartDeltaEvent
+                                            ) and isinstance(event.delta, TextPartDelta):
+                                                delta_content = event.delta.content_delta
+                                                yield f"data: {json.dumps({'type': 'text', 'content': delta_content})}\n\n"
+                                                full_response += delta_content
+                                                last_activity = asyncio.get_event_loop().time()
+
+                except asyncio.TimeoutError:
+                    logger.error(f"Stream timeout after {STREAM_TIMEOUT}s for session {session_id}")
+                    error_msg = f"Request timed out after {STREAM_TIMEOUT} seconds"
+                    yield f"data: {json.dumps({'type': 'error', 'content': error_msg})}\n\n"
+                    return
 
                 # Extract tools used from the final result
                 result = run.result
